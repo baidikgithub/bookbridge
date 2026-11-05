@@ -5,12 +5,6 @@ Book donation inventory app for donation drives: volunteers register donated boo
 - `mobile/`: React Native app (iOS and Android)
 - `server/`: Go API with Postgres
 
-## Server
-
-```bash
-cd server
-DATABASE_URL="postgres://localhost:5432/bookbridge" JWT_SECRET="<at least 32 characters>" go run ./cmd/api
-```
 
 The schema is applied automatically on startup. The first account registered becomes admin.
 
