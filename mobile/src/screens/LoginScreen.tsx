@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Card, PrimaryButton, styles as cs } from '../components';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Banner, Field, PrimaryButton, Section } from '../components';
 import { api, type User } from '../data';
-import { colors, fonts } from '../theme';
+import { colors, space, type } from '../theme';
 
 export function LoginScreen({ onSignedIn, top }: { onSignedIn: (token: string, user: User) => void; top: number }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -31,66 +31,48 @@ export function LoginScreen({ onSignedIn, top }: { onSignedIn: (token: string, u
 
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[s.content, { paddingTop: top + 80 }]}>
-        <Text style={s.title}>BookBridge</Text>
-        <Text style={s.sub}>{registering ? 'Create a volunteer account' : 'Sign in to manage donated books'}</Text>
+      <ScrollView contentContainerStyle={[s.content, { paddingTop: top + 56 }]} keyboardShouldPersistTaps="handled">
+        <View style={s.brand}>
+          <View style={s.logo}>
+            <Text style={s.logoGlyph}>▤</Text>
+          </View>
+          <Text style={type.largeTitle}>BookBridge</Text>
+          <Text style={[type.subhead, { color: colors.muted, textAlign: 'center' }]}>
+            {registering ? 'Create a volunteer account' : 'Sign in to manage donated books'}
+          </Text>
+        </View>
 
-        <Card>
-          {registering && <Field label="Name" value={name} onChange={setName} />}
-          <Field label="Email" value={email} onChange={setEmail} keyboard="email-address" />
-          <Field label="Password" value={password} onChange={setPassword} secure last />
-        </Card>
+        <Section footer={registering ? 'Passwords need at least 8 characters.' : undefined}>
+          {registering && <Field label="Name" value={name} onChange={setName} placeholder="Full name" autoCapitalize="words" textContentType="name" />}
+          <Field
+            label="Email"
+            value={email}
+            onChange={setEmail}
+            placeholder="name@example.com"
+            keyboard="email-address"
+            autoCapitalize="none"
+            textContentType="emailAddress"
+          />
+          <Field label="Password" value={password} onChange={setPassword} placeholder="Required" secure autoCapitalize="none" textContentType="password" last />
+        </Section>
 
-        {error && <Text style={s.error}>{error}</Text>}
+        {error && <Banner tone="error" text={error} />}
 
-        <PrimaryButton label={busy ? 'Please wait…' : registering ? 'Create account' : 'Sign in'} onPress={submit} />
-        <Pressable onPress={() => setMode(registering ? 'login' : 'register')} hitSlop={12} style={{ alignSelf: 'center' }}>
+        <PrimaryButton label={busy ? 'Please wait…' : registering ? 'Create Account' : 'Sign In'} onPress={submit} disabled={busy} />
+        <Pressable accessibilityRole="button" onPress={() => setMode(registering ? 'login' : 'register')} hitSlop={12} style={s.switch}>
           <Text style={s.link}>{registering ? 'I already have an account' : 'Create an account'}</Text>
         </Pressable>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  keyboard,
-  secure,
-  last,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  keyboard?: 'email-address';
-  secure?: boolean;
-  last?: boolean;
-}) {
-  return (
-    <View style={[cs.kvRow, !last && cs.kvBorder, { gap: 12 }]}>
-      <Text style={[cs.kvKey, { width: 80 }]}>{label}</Text>
-      <TextInput
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChange}
-        keyboardType={keyboard}
-        secureTextEntry={secure}
-        autoCapitalize={label === 'Name' ? 'words' : 'none'}
-        autoCorrect={false}
-        textContentType={secure ? 'password' : label === 'Email' ? 'emailAddress' : 'name'}
-        style={s.input}
-      />
-    </View>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: 20, gap: 16 },
-  title: { fontFamily: fonts.display, fontSize: 36, fontWeight: '600', color: colors.ink },
-  sub: { fontSize: 15, color: colors.muted, marginTop: -8, marginBottom: 8 },
-  input: { flex: 1, fontSize: 15, color: colors.ink, paddingVertical: 12 },
-  error: { fontSize: 14, color: colors.warnInk },
-  link: { fontSize: 15, fontWeight: '500', color: colors.primary },
+  content: { paddingHorizontal: space.gutter, paddingBottom: space.xl, gap: space.lg },
+  brand: { alignItems: 'center', gap: space.xs, marginBottom: space.sm },
+  logo: { width: 64, height: 64, borderRadius: 15, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: space.sm },
+  logoGlyph: { fontSize: 30, color: '#FFFFFF' },
+  switch: { alignSelf: 'center', minHeight: 44, justifyContent: 'center' },
+  link: { fontSize: 17, color: colors.primary },
 });

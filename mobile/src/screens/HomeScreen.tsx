@@ -1,133 +1,130 @@
 import React from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Bar, Card, Cover, StateView } from '../components';
-import { api, computeStats, coverColor, gradeLabel, useAsync } from '../data';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Bar, Card, Cover, PrimaryButton, Row, Section, StateView } from '../components';
+import { api, coverColor, gradeLabel, shortDate, useAsync, type User } from '../data';
 import type { Nav } from '../nav';
-import { colors, fonts, radius } from '../theme';
+import { colors, space, type } from '../theme';
 
-export function HomeScreen({ nav, top }: { nav: Nav; top: number }) {
+export function HomeScreen({ nav, user, top }: { nav: Nav; user: User; top: number }) {
   const { data, error, loading, reload } = useAsync(
-    () => api.allBooks().then(books => ({
-        stats: computeStats(books, 1),
-        recent: [...books].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 3),
-      })),
+    () =>
+      Promise.all([api.stats(1), api.listBooks({ limit: 3 }), api.listDonations({ limit: 3 })]).then(
+        ([stats, books, donations]) => ({ stats, recent: books.data, donations: donations.data }),
+      ),
     [],
   );
   const stats = data?.stats ?? null;
   const recent = data?.recent ?? [];
+  const donations = data?.donations ?? [];
   const topSubjects = stats?.by_subject.slice(0, 4) ?? [];
   const max = topSubjects[0]?.count || 1;
-  const availPct = stats && stats.total ? Math.round((stats.available / stats.total) * 100) : 0;
+  const availPct = stats && stats.total ? (stats.available / stats.total) * 100 : 0;
 
   return (
     <ScrollView
       style={s.root}
-      contentContainerStyle={[s.content, { paddingTop: top + 16 }]}
+      contentContainerStyle={[s.content, { paddingTop: top }]}
       refreshControl={<RefreshControl refreshing={loading && !!data} onRefresh={reload} />}>
-      <Text style={s.title}>BookBridge</Text>
+      <View style={s.body}>
+        <Card style={s.summary}>
+          <Text style={type.footnote}>Total books collected</Text>
+          <Text style={s.bigNum}>{stats ? stats.total.toLocaleString() : '—'}</Text>
+          <Bar pct={availPct} color={colors.primary} height={6} />
+          <View style={s.legendRow}>
+            <Legend dot={colors.primary} label="Available" value={stats?.available} />
+            <Legend dot={colors.track} label="Donated" value={stats?.donated} />
+          </View>
+        </Card>
 
-      <View style={s.hero}>
-        <Text style={s.heroLabel}>Total books collected</Text>
-        <Text style={s.heroNum}>{stats ? stats.total.toLocaleString() : '—'}</Text>
-        <View style={s.split}>
-          <View style={{ width: `${availPct}%`, backgroundColor: '#7C93FF' }} />
-          <View style={{ flex: 1, backgroundColor: stats?.donated ? '#FFB25C' : '#2E3A48' }} />
+        <View style={s.actions}>
+          <PrimaryButton label="Add Book" onPress={() => nav.push({ name: 'Scan' })} style={{ flex: 1 }} />
+          <PrimaryButton label="Donate Book" tone="accent" onPress={() => nav.tab('Inventory')} style={{ flex: 1 }} />
         </View>
-        <View style={s.heroRow}>
-          <HeroStat dot="#7C93FF" label="Available" value={stats?.available} />
-          <HeroStat dot="#FFB25C" label="Donated" value={stats?.donated} />
-        </View>
-      </View>
 
-      <View style={s.actions}>
-        <Pressable accessibilityRole="button" onPress={() => nav.push({ name: 'Scan' })} style={[s.action, { backgroundColor: colors.primary }]}>
-          <Text style={[s.actionGlyph, { color: '#FFFFFF' }]}>▥</Text>
-          <Text style={[s.actionText, { color: '#FFFFFF' }]}>Add a book</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => nav.tab('Inventory')} style={[s.action, { backgroundColor: colors.surface }]}>
-          <Text style={[s.actionGlyph, { color: colors.accent }]}>♡</Text>
-          <Text style={s.actionText}>Donate a book</Text>
-        </Pressable>
-      </View>
-
-      {!stats ? (
-        <StateView loading={loading} error={error} onRetry={reload} />
-      ) : stats.titles === 0 ? (
-        <StateView empty="No books yet. Add your first book to get started." />
-      ) : (
-        <>
-          <Card style={s.subjects}>
-            <View style={s.rowBetween}>
-              <Text style={s.h2}>By subject</Text>
-              <Pressable onPress={() => nav.tab('Reports')} hitSlop={12}>
-                <Text style={s.link}>Reports</Text>
-              </Pressable>
-            </View>
-            {topSubjects.map(({ label: name, count: n }) => (
-              <View key={name} style={s.subjectRow}>
-                <Text style={s.subjectName} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Bar pct={(n / max) * 100} />
-                <Text style={s.subjectNum}>{n.toLocaleString()}</Text>
+        {!stats ? (
+          <StateView loading={loading} error={error} onRetry={reload} />
+        ) : stats.titles === 0 ? (
+          <StateView empty="No books yet. Add your first book to get started." />
+        ) : (
+          <>
+            <Section header="By subject" action={{ label: 'Reports', onPress: () => nav.tab('Reports') }}>
+              <View style={s.subjects}>
+                {topSubjects.map(({ label, count }) => (
+                  <View key={label} style={s.subjectRow}>
+                    <Text style={[type.subhead, s.subjectName]} numberOfLines={1}>
+                      {label}
+                    </Text>
+                    <Bar pct={(count / max) * 100} />
+                    <Text style={[type.subhead, s.subjectNum]}>{count.toLocaleString()}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </Card>
+            </Section>
 
-          <Text style={s.h2}>Recently added</Text>
-          {recent.map(b => (
-            <Pressable key={b.id} onPress={() => nav.push({ name: 'Detail', bookId: b.id })}>
-              <Card style={s.recent}>
-                <Cover color={coverColor(b)} uri={b.cover_url} />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.bookTitle}>{b.title}</Text>
-                  <Text style={s.meta}>
-                    {b.subject ?? 'No subject'} · {gradeLabel(b)} · ×{b.quantity}
-                  </Text>
-                </View>
-              </Card>
-            </Pressable>
-          ))}
-        </>
-      )}
+            <Section header="Recently added" action={{ label: 'See All', onPress: () => nav.tab('Inventory') }}>
+              {recent.map((b, i) => (
+                <Row
+                  key={b.id}
+                  leading={<Cover color={coverColor(b)} uri={b.cover_url} w={32} h={44} />}
+                  title={b.title}
+                  subtitle={`${b.subject ?? 'No subject'} · ${gradeLabel(b)} · ×${b.quantity}`}
+                  onPress={() => nav.push({ name: 'Detail', bookId: b.id })}
+                  last={i === recent.length - 1}
+                />
+              ))}
+            </Section>
+
+            <Section header="Manage">
+              <Row title="Donations" onPress={() => nav.push({ name: 'Donations' })} />
+              <Row title="Collection drives" onPress={() => nav.push({ name: 'Drives' })} last={user.role !== 'admin'} />
+              {user.role === 'admin' && <Row title="Users and roles" onPress={() => nav.push({ name: 'Users' })} last />}
+            </Section>
+
+            <Section header="Recent donations" action={{ label: 'See All', onPress: () => nav.push({ name: 'Donations' }) }}>
+              {donations.length === 0 ? (
+                <Row title="No donations recorded yet" />
+              ) : (
+                donations.map((d, i) => (
+                  <Row
+                    key={d.id}
+                    title={d.book_title}
+                    subtitle={`${d.child_name} · Grade ${d.grade} · ${d.school}`}
+                    value={shortDate(d.donated_on)}
+                    onPress={() => nav.push({ name: 'Detail', bookId: d.book_id })}
+                    last={i === donations.length - 1}
+                  />
+                ))
+              )}
+            </Section>
+          </>
+        )}
+      </View>
     </ScrollView>
   );
 }
 
-function HeroStat({ dot, label, value }: { dot: string; label: string; value?: number }) {
+function Legend({ dot, label, value }: { dot: string; label: string; value?: number }) {
   return (
-    <View style={{ flex: 1, gap: 2 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} />
-        <Text style={s.heroLabel}>{label}</Text>
-      </View>
-      <Text style={s.heroStat}>{value != null ? value.toLocaleString() : '—'}</Text>
+    <View style={s.legend}>
+      <View style={[s.dot, { backgroundColor: dot }]} />
+      <Text style={type.footnote}>{label}</Text>
+      <Text style={[type.subhead, { fontWeight: '600' }]}>{value != null ? value.toLocaleString() : '—'}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingHorizontal: 20, paddingBottom: 24, gap: 18 },
-  title: { fontFamily: fonts.display, fontSize: 32, fontWeight: '600', color: colors.ink },
-  hero: { backgroundColor: colors.dark, borderRadius: radius.xxl, padding: 20, gap: 14 },
-  heroLabel: { fontSize: 13, color: '#B9C2CE', fontWeight: '500' },
-  heroNum: { fontFamily: fonts.display, fontSize: 48, fontWeight: '600', color: '#FFFFFF' },
-  split: { height: 8, borderRadius: 4, flexDirection: 'row', overflow: 'hidden' },
-  heroRow: { flexDirection: 'row', gap: 12 },
-  heroStat: { fontSize: 20, fontWeight: '600', color: '#FFFFFF' },
-  actions: { flexDirection: 'row', gap: 12 },
-  action: { flex: 1, borderRadius: radius.xl, padding: 16, minHeight: 96, justifyContent: 'space-between' },
-  actionGlyph: { fontSize: 24 },
-  actionText: { fontSize: 15, fontWeight: '600', color: colors.ink },
-  subjects: { padding: 16, gap: 12, borderRadius: radius.xl },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  h2: { fontSize: 17, fontWeight: '600', color: colors.ink },
-  link: { fontSize: 14, fontWeight: '500', color: colors.primary },
-  subjectRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  subjectName: { width: 104, fontSize: 14, color: colors.inkSoft },
-  subjectNum: { width: 48, textAlign: 'right', fontSize: 14, fontWeight: '600', color: colors.ink },
-  recent: { padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center' },
-  bookTitle: { fontSize: 15, fontWeight: '600', color: colors.ink },
-  meta: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  content: { paddingBottom: space.xl },
+  body: { paddingHorizontal: space.gutter, gap: space.xl, paddingTop: space.md },
+  summary: { padding: space.lg, gap: space.sm },
+  bigNum: { fontSize: 40, lineHeight: 46, fontWeight: '700', color: colors.ink, fontVariant: ['tabular-nums'] },
+  legendRow: { flexDirection: 'row', gap: space.xl, marginTop: 2 },
+  legend: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  actions: { flexDirection: 'row', gap: space.md, marginTop: -space.sm },
+  subjects: { padding: space.lg, gap: space.md },
+  subjectRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  subjectName: { width: 110 },
+  subjectNum: { width: 44, textAlign: 'right', fontWeight: '600', fontVariant: ['tabular-nums'] },
 });

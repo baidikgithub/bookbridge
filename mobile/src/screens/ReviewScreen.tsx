@@ -1,15 +1,33 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Card, Chip, PrimaryButton, SectionLabel, styles as cs } from '../components';
-import { ApiError, api, CONDITIONS, SUBJECTS } from '../data';
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { launchCamera, launchImageLibrary, type ImagePickerResponse } from 'react-native-image-picker';
+import { Banner, Chip, Dropdown, Field, NavBar, PrimaryButton, Section, SectionLabel, Stepper, TextButton } from '../components';
+import { ApiError, api, CONDITIONS, SUBJECTS, useAsync, type Photo } from '../data';
 import type { Nav } from '../nav';
-import { colors } from '../theme';
+import { colors, hairline, radius, space, type } from '../theme';
+
+const SUBJECT_OPTIONS = SUBJECTS.map(x => ({ value: x, label: x }));
 
 // New-book form. Fields start empty; AI recognition will prefill them once it exists.
-export function ReviewScreen({ nav, top, bottom }: { nav: Nav; top: number; bottom: number }) {
+export function ReviewScreen({
+  nav,
+  top,
+  bottom,
+  isbn: scannedIsbn,
+  photo: initialPhoto,
+}: {
+  nav: Nav;
+  top: number;
+  bottom: number;
+  isbn?: string;
+  photo?: Photo;
+}) {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
-  const [isbn, setIsbn] = useState('');
+  const [isbn, setIsbn] = useState(scannedIsbn ?? '');
+  const [photo, setPhoto] = useState<Photo | undefined>(initialPhoto);
+  const [driveId, setDriveId] = useState<number | null>(null);
+  const drives = useAsync(() => api.listDrives(), []);
   const [language, setLanguage] = useState('English');
   const [gradeFrom, setGradeFrom] = useState('');
   const [gradeTo, setGradeTo] = useState('');
@@ -17,21 +35,39 @@ export function ReviewScreen({ nav, top, bottom }: { nav: Nav; top: number; bott
   const [subject, setSubject] = useState<string | null>(null);
   const [condition, setCondition] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<false | 'photo' | 'book'>(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicateId, setDuplicateId] = useState<number | null>(null);
+
+  // Both open in place, so anything already typed in the form is kept.
+  const opts = { mediaType: 'photo', maxWidth: 1600, maxHeight: 1600, quality: 0.8 } as const;
+  const pickPhoto = async () => applyPicked(await launchImageLibrary({ ...opts, selectionLimit: 1 }));
+  const takePhoto = async () => applyPicked(await launchCamera({ ...opts, saveToPhotos: false }));
+  const applyPicked = (res: ImagePickerResponse) => {
+    const a = res.assets?.[0];
+    if (a?.uri) {
+      setPhoto({ uri: a.uri, type: a.type, fileName: a.fileName });
+    } else if (res.errorMessage) {
+      setError(res.errorMessage);
+    }
+  };
 
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
 
   const save = async () => {
+    if (saving) {
+      return;
+    }
     if (!title.trim()) {
       setError('Title is required.');
       return;
     }
-    setSaving(true);
+    setSaving(photo ? 'photo' : 'book');
     setError(null);
     setDuplicateId(null);
     try {
+      const coverUrl = photo ? await api.uploadImage(photo) : undefined;
+      setSaving('book');
       const book = await api.createBook({
         title: title.trim(),
         author: author.trim() || undefined,
@@ -43,6 +79,8 @@ export function ReviewScreen({ nav, top, bottom }: { nav: Nav; top: number; bott
         grade_to: num(gradeTo),
         quantity: qty,
         description: description.trim() || undefined,
+        cover_url: coverUrl,
+        drive_id: driveId ?? undefined,
       });
       nav.push({ name: 'Detail', bookId: book.id });
     } catch (e) {
@@ -57,54 +95,87 @@ export function ReviewScreen({ nav, top, bottom }: { nav: Nav; top: number; bott
   };
 
   return (
-    <View style={[s.root, { paddingTop: top }]}>
-      <View style={s.nav}>
-        <Pressable onPress={nav.back} hitSlop={12}>
-          <Text style={s.navLink}>Cancel</Text>
-        </Pressable>
-        <Text style={s.navTitle}>Book details</Text>
-        <View style={{ width: 52 }} />
-      </View>
+    <KeyboardAvoidingView style={[s.root, { paddingTop: top }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <NavBar
+        title="New Book"
+        onBack={nav.back}
+        backLabel="Cancel"
+        right={<TextButton label={saving ? 'Saving…' : 'Save'} bold onPress={save} />}
+      />
 
-      <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {duplicateId != null && (
-          <Pressable style={s.notice} onPress={() => nav.push({ name: 'Detail', bookId: duplicateId })}>
-            <Text style={s.noticeText}>
-              <Text style={{ fontWeight: '700' }}>Already in inventory. </Text>A book with this ISBN exists. Tap to open it and update its quantity.
-            </Text>
-          </Pressable>
+          <Banner
+            text="Already in inventory. A book with this ISBN exists — tap to open it and update its quantity."
+            onPress={() => nav.push({ name: 'Detail', bookId: duplicateId })}
+          />
         )}
-        {error && <Text style={s.error}>{error}</Text>}
+        {error && <Banner tone="error" text={error} />}
 
-        <Card>
-          <Field label="Title" value={title} onChange={setTitle} placeholder="Required" />
-          <Field label="Author" value={author} onChange={setAuthor} placeholder="Optional" />
-          <Field label="ISBN" value={isbn} onChange={setIsbn} placeholder="Optional" keyboard="numbers-and-punctuation" />
-          <Field label="Language" value={language} onChange={setLanguage} placeholder="English" />
-          <Field label="Grade from" value={gradeFrom} onChange={setGradeFrom} placeholder="e.g. 7" keyboard="number-pad" />
-          <Field label="Grade to" value={gradeTo} onChange={setGradeTo} placeholder="e.g. 9" keyboard="number-pad" />
-          <View style={cs.kvRow}>
-            <Text style={cs.kvKey}>Quantity</Text>
-            <View style={s.stepper}>
-              <Pressable accessibilityLabel="Decrease" onPress={() => setQty(q => Math.max(1, q - 1))} style={s.stepBtn}>
-                <Text style={s.stepText}>−</Text>
+        <Section header="Cover photo">
+          <View style={s.photoRow}>
+            {photo ? (
+              <Image source={{ uri: photo.uri }} style={s.photo} resizeMode="cover" accessibilityLabel="Cover photo" />
+            ) : (
+              <View style={[s.photo, s.photoEmpty]}>
+                <Text style={type.caption}>No photo</Text>
+              </View>
+            )}
+            <View style={{ flex: 1, gap: space.sm }}>
+              <Pressable accessibilityRole="button" onPress={takePhoto} hitSlop={8}>
+                <Text style={s.link}>{photo ? 'Retake Photo' : 'Take Photo'}</Text>
               </Pressable>
-              <Text style={s.qty}>{qty}</Text>
-              <Pressable accessibilityLabel="Increase" onPress={() => setQty(q => q + 1)} style={s.stepBtn}>
-                <Text style={s.stepText}>+</Text>
+              <Pressable accessibilityRole="button" onPress={pickPhoto} hitSlop={8}>
+                <Text style={s.link}>Choose from Library</Text>
               </Pressable>
+              {photo && (
+                <Pressable accessibilityRole="button" onPress={() => setPhoto(undefined)} hitSlop={8}>
+                  <Text style={[s.link, { color: colors.danger }]}>Remove Photo</Text>
+                </Pressable>
+              )}
             </View>
           </View>
-        </Card>
+        </Section>
 
-        <View>
-          <SectionLabel>Subject</SectionLabel>
-          <View style={s.chips}>
-            {SUBJECTS.map(x => (
-              <Chip key={x} label={x} selected={subject === x} onPress={() => setSubject(subject === x ? null : x)} />
-            ))}
+        <Section header="Book">
+          <Field label="Title" value={title} onChange={setTitle} placeholder="Required" autoCapitalize="words" />
+          <Field label="Author" value={author} onChange={setAuthor} placeholder="Optional" autoCapitalize="words" />
+          <Field label="ISBN" value={isbn} onChange={setIsbn} placeholder="Optional" keyboard="numbers-and-punctuation" />
+          <Field label="Language" value={language} onChange={setLanguage} placeholder="English" last />
+        </Section>
+
+        <Section header="Stock" footer="Grades run from 0 (kindergarten) to 12.">
+          <Field label="Grade from" value={gradeFrom} onChange={setGradeFrom} placeholder="e.g. 7" keyboard="number-pad" />
+          <Field label="Grade to" value={gradeTo} onChange={setGradeTo} placeholder="e.g. 9" keyboard="number-pad" />
+          <View style={s.qtyRow}>
+            <Text style={type.body}>Quantity</Text>
+            <View style={s.qtyRight}>
+              <Text style={[type.body, s.qty]}>{qty}</Text>
+              <Stepper value={qty} onChange={setQty} />
+            </View>
           </View>
+        </Section>
+
+        <View style={s.dropdownRow}>
+          <Dropdown
+            label="Subject"
+            allLabel="Choose a subject"
+            options={SUBJECT_OPTIONS}
+            value={subject ?? undefined}
+            onChange={v => setSubject(v ?? null)}
+          />
         </View>
+
+        {(drives.data?.length ?? 0) > 0 && (
+          <View>
+            <SectionLabel>Collection drive</SectionLabel>
+            <View style={s.chips}>
+              {drives.data!.map(d => (
+                <Chip key={d.id} label={d.name} selected={driveId === d.id} onPress={() => setDriveId(driveId === d.id ? null : d.id)} />
+              ))}
+            </View>
+          </View>
+        )}
 
         <View>
           <SectionLabel>Condition</SectionLabel>
@@ -115,72 +186,38 @@ export function ReviewScreen({ nav, top, bottom }: { nav: Nav; top: number; bott
           </View>
         </View>
 
-        <View>
-          <SectionLabel>Description</SectionLabel>
-          <Card style={{ padding: 12 }}>
-            <TextInput
-              accessibilityLabel="Description"
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Short summary of the book"
-              placeholderTextColor="#9AA3AE"
-              multiline
-              style={s.desc}
-            />
-          </Card>
-        </View>
+        <Section header="Description">
+          <TextInput
+            accessibilityLabel="Description"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Short summary of the book"
+            placeholderTextColor={colors.faint}
+            multiline
+            style={s.desc}
+          />
+        </Section>
       </ScrollView>
 
-      <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: bottom + 12 }}>
-        <PrimaryButton label={saving ? 'Saving…' : 'Add to inventory'} onPress={() => !saving && save()} />
+      <View style={[s.footer, { paddingBottom: bottom + space.md }]}>
+        <PrimaryButton label={saving === 'photo' ? 'Uploading photo…' : saving ? 'Saving…' : 'Add to Inventory'} onPress={save} disabled={!!saving} />
       </View>
-    </View>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  keyboard,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  keyboard?: 'number-pad' | 'numbers-and-punctuation';
-}) {
-  return (
-    <View style={[cs.kvRow, cs.kvBorder, { gap: 12 }]}>
-      <Text style={cs.kvKey}>{label}</Text>
-      <TextInput
-        accessibilityLabel={label}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        placeholderTextColor="#9AA3AE"
-        keyboardType={keyboard}
-        style={s.input}
-      />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  nav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, height: 44 },
-  navLink: { fontSize: 17, color: colors.primary },
-  navTitle: { fontSize: 17, fontWeight: '600', color: colors.ink },
-  content: { padding: 20, gap: 16 },
-  notice: { backgroundColor: colors.noticeBg, borderRadius: 14, padding: 14 },
-  noticeText: { fontSize: 13, lineHeight: 18, color: colors.noticeInk },
-  error: { fontSize: 14, color: colors.warnInk },
-  input: { flex: 1, textAlign: 'right', fontSize: 15, fontWeight: '500', color: colors.ink },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  stepBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.track, alignItems: 'center', justifyContent: 'center' },
-  stepText: { fontSize: 18, color: colors.ink },
-  qty: { minWidth: 16, textAlign: 'center', fontSize: 15, fontWeight: '600', color: colors.ink },
-  desc: { minHeight: 80, fontSize: 14, lineHeight: 21, color: colors.inkSoft, textAlignVertical: 'top' },
+  content: { padding: space.gutter, paddingTop: space.sm, gap: space.xl },
+  qtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, minHeight: 50 },
+  qtyRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  qty: { minWidth: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  dropdownRow: { flexDirection: 'row' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.xs },
+  desc: { minHeight: 88, fontSize: 17, lineHeight: 22, color: colors.ink, padding: space.lg, paddingTop: space.md, textAlignVertical: 'top' },
+  photoRow: { flexDirection: 'row', gap: space.lg, alignItems: 'center', padding: space.md, paddingLeft: space.lg },
+  photo: { width: 72, height: 100, borderRadius: radius.sm, backgroundColor: colors.field },
+  photoEmpty: { alignItems: 'center', justifyContent: 'center' },
+  link: { fontSize: 17, color: colors.primary },
+  footer: { paddingHorizontal: space.gutter, paddingTop: space.md, borderTopWidth: hairline, borderTopColor: colors.line },
 });

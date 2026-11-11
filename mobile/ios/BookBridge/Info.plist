@@ -34,6 +34,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>BookBridge uses the camera to photograph book covers and scan ISBN barcodes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>BookBridge lets you choose an existing photo of a book cover.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>RCTNewArchEnabled</key>

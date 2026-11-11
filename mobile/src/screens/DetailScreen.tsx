@@ -1,37 +1,48 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Card, Cover, KeyValueRow, PrimaryButton, StateView, StatusPill } from '../components';
-import { api, coverColor, gradeLabel, useAsync } from '../data';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { Banner, Cover, KeyValueRow, NavBar, PrimaryButton, Row, Section, StatTile, StateView, StatusPill } from '../components';
+import { api, shortDate, coverColor, gradeLabel, useAsync, type User } from '../data';
 import type { Nav } from '../nav';
-import { colors, fonts } from '../theme';
+import { colors, hairline, space, type } from '../theme';
 import { DonateSheet } from './DonateSheet';
 
-export function DetailScreen({
-  nav,
-  bookId,
-  top,
-  bottom,
-}: {
-  nav: Nav;
-  bookId: number;
-  top: number;
-  bottom: number;
-}) {
-  const { data: book, error, loading, reload, setData } = useAsync(() => api.getBook(bookId), [bookId]);
+export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; bookId: number; user: User; top: number; bottom: number }) {
+  const { data: book, error, loading, reload } = useAsync(() => api.getBook(bookId), [bookId]);
+  const history = useAsync(() => api.listDonations({ book_id: bookId, limit: 20 }), [bookId]);
   const [donating, setDonating] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  // The server only lets coordinators and admins record donations.
+  const canDonate = user.role === 'coordinator' || user.role === 'admin';
 
   if (!book) {
     return (
-      <View style={[s.root, { paddingTop: top + 4 }]}>
-        <View style={[s.nav, { paddingHorizontal: 16 }]}>
-          <Pressable onPress={nav.back} hitSlop={12}>
-            <Text style={s.navLink}>‹ Back</Text>
-          </Pressable>
-        </View>
+      <View style={[s.root, { paddingTop: top }]}>
+        <NavBar onBack={nav.back} />
         <StateView loading={loading} error={error} onRetry={reload} />
       </View>
     );
   }
+
+  const changeCover = async () => {
+    const res = await launchImageLibrary({ mediaType: 'photo', maxWidth: 1600, maxHeight: 1600, quality: 0.8, selectionLimit: 1 });
+    const a = res.assets?.[0];
+    if (!a?.uri) {
+      return;
+    }
+    setCoverBusy(true);
+    setCoverError(null);
+    try {
+      const url = await api.uploadImage({ uri: a.uri, type: a.type, fileName: a.fileName });
+      await api.updateBook(book.id, { cover_url: url });
+      reload();
+    } catch (e) {
+      setCoverError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCoverBusy(false);
+    }
+  };
 
   const available = book.available_quantity;
   const fields: [string, string][] = [
@@ -41,90 +52,107 @@ export function DetailScreen({
     ['Condition', book.condition ?? '—'],
     ['ISBN', book.isbn ?? '—'],
   ];
+  const donations = history.data?.data ?? [];
 
   return (
-    <View style={s.root}>
-      <ScrollView>
-        <View style={[s.header, { paddingTop: top + 4 }]}>
-          <View style={s.nav}>
-            <Pressable onPress={nav.back} hitSlop={12}>
-              <Text style={s.navLink}>‹ Back</Text>
-            </Pressable>
+    <View style={[s.root, { paddingTop: top }]}>
+      <NavBar onBack={nav.back} />
+      <ScrollView contentContainerStyle={s.content}>
+        <View style={s.head}>
+          <View style={{ gap: 6, alignItems: 'center' }}>
+            <Cover color={coverColor(book)} uri={book.cover_url} w={84} h={120} />
+            {canDonate && (
+              <Pressable accessibilityRole="button" onPress={changeCover} disabled={coverBusy} hitSlop={8}>
+                <Text style={s.coverLink}>{coverBusy ? 'Uploading…' : book.cover_url ? 'Change Photo' : 'Add Photo'}</Text>
+              </Pressable>
+            )}
           </View>
-          <View style={s.headRow}>
-            <Cover color={coverColor(book)} uri={book.cover_url} w={96} h={138} />
-            <View style={{ flex: 1, gap: 6 }}>
-              <Text style={s.title}>{book.title}</Text>
-              {book.author ? <Text style={s.author}>{book.author}</Text> : null}
-              <StatusPill available={available} />
-            </View>
+          <View style={s.headText}>
+            <Text style={type.title2}>{book.title}</Text>
+            {book.author ? <Text style={[type.subhead, { color: colors.muted }]}>{book.author}</Text> : null}
+            <StatusPill available={available} />
           </View>
         </View>
 
-        <View style={s.body}>
-          <View style={s.stats}>
-            <Stat label="Available" value={available} />
-            <Stat label="Donated" value={book.quantity - available} />
-            <Stat label="Total" value={book.quantity} />
-          </View>
+        {coverError && <Banner tone="error" text={coverError} />}
 
-          <Card>
-            {fields.map(([k, v], i) => (
-              <KeyValueRow key={k} k={k} v={v} last={i === fields.length - 1} />
-            ))}
-          </Card>
-
-          {book.description ? (
-            <Card style={{ padding: 16 }}>
-              <Text style={s.desc}>{book.description}</Text>
-            </Card>
-          ) : null}
+        <View style={s.stats}>
+          <StatTile label="Available" value={available} tint={colors.okInk} />
+          <StatTile label="Donated" value={book.quantity - available} />
+          <StatTile label="Total" value={book.quantity} />
         </View>
+
+        <Section header="Details">
+          {fields.map(([k, v], i) => (
+            <KeyValueRow key={k} k={k} v={v} last={i === fields.length - 1} />
+          ))}
+        </Section>
+
+        {book.description ? (
+          <Section header="Description">
+            <Text style={[type.body, s.desc]}>{book.description}</Text>
+          </Section>
+        ) : null}
+
+        <Section header="Donation history">
+          {donations.length ? (
+            donations.map((d, i) => (
+              <Row
+                key={d.id}
+                title={d.child_name}
+                subtitle={`Grade ${d.grade} · ${d.school}`}
+                value={shortDate(d.donated_on)}
+                last={i === donations.length - 1}
+              />
+            ))
+          ) : (
+            <Row title={history.loading ? 'Loading…' : history.error ?? 'No donations recorded yet'} />
+          )}
+        </Section>
       </ScrollView>
 
-      <View style={[s.footer, { paddingBottom: bottom + 12 }]}>
-        <PrimaryButton
-          label={available > 0 ? 'Donate book' : 'No copies left'}
-          tone="accent"
-          onPress={() => available > 0 && setDonating(true)}
-          style={{ flex: 1, opacity: available > 0 ? 1 : 0.5 }}
-        />
+      <View style={[s.footer, { paddingBottom: bottom + space.md }]}>
+        {canDonate ? (
+          <PrimaryButton
+            label={available > 0 ? 'Donate Book' : 'No Copies Left'}
+            tone="accent"
+            disabled={available < 1}
+            onPress={() => setDonating(true)}
+          />
+        ) : (
+          <Text style={[type.footnote, { textAlign: 'center', paddingVertical: space.md }]}>
+            Ask a coordinator to record donations for this book.
+          </Text>
+        )}
       </View>
 
       <DonateSheet
         visible={donating}
         book={book}
         onCancel={() => setDonating(false)}
-        onDonated={updated => {
-          setData(updated);
+        onDonated={() => {
           setDonating(false);
+          reload();
+          history.reload();
         }}
       />
     </View>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <Card style={{ flex: 1, padding: 12, borderRadius: 14 }}>
-      <Text style={s.statLabel}>{label}</Text>
-      <Text style={s.statValue}>{value}</Text>
-    </Card>
-  );
-}
-
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: '#EADBC4', paddingHorizontal: 16, paddingBottom: 24, gap: 16 },
-  nav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 44 },
-  navLink: { fontSize: 17, color: colors.primary },
-  headRow: { flexDirection: 'row', gap: 16, alignItems: 'flex-end' },
-  title: { fontFamily: fonts.display, fontSize: 22, fontWeight: '600', color: colors.ink },
-  author: { fontSize: 14, color: '#4A3B26' },
-  body: { padding: 20, gap: 14 },
-  stats: { flexDirection: 'row', gap: 10 },
-  statLabel: { fontSize: 12, color: colors.muted },
-  statValue: { fontSize: 22, fontWeight: '700', color: colors.ink },
-  desc: { fontSize: 14, lineHeight: 21, color: colors.inkSoft },
-  footer: { paddingHorizontal: 20, paddingTop: 12, flexDirection: 'row' },
+  content: { paddingHorizontal: space.gutter, paddingBottom: space.xl, gap: space.xl },
+  head: { flexDirection: 'row', gap: space.lg, alignItems: 'flex-end', paddingTop: space.sm },
+  headText: { flex: 1, gap: 6 },
+  coverLink: { fontSize: 13, color: colors.primary },
+  stats: { flexDirection: 'row', gap: space.sm, marginTop: -space.sm },
+  desc: { padding: space.lg, color: colors.inkSoft },
+  footer: {
+    paddingHorizontal: space.gutter,
+    paddingTop: space.md,
+    backgroundColor: colors.bg,
+    borderTopWidth: hairline,
+    borderTopColor: colors.line,
+  },
 });

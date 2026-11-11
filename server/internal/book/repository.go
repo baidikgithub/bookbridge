@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -37,7 +38,16 @@ func (r *Repository) Create(ctx context.Context, b *Book) (*Book, error) {
 		b.ISBN, b.Title, b.Author, b.Subject, b.GradeFrom, b.GradeTo, b.Language, b.Condition,
 		b.Quantity, b.AvailableQuantity, b.Description, b.CoverURL, b.DriveID, b.CreatedBy,
 	)
-	return scanBook(row)
+	return foreignKeyAsValidation(scanBook(row))
+}
+
+// foreignKeyAsValidation turns a missing collection drive into a 400 instead of a 500.
+func foreignKeyAsValidation(b *Book, err error) (*Book, error) {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		return nil, &ValidationError{Message: "collection drive not found"}
+	}
+	return b, err
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int64) (*Book, error) {
@@ -81,7 +91,7 @@ func (r *Repository) Update(ctx context.Context, b *Book) (*Book, error) {
 		b.ISBN, b.Title, b.Author, b.Subject, b.GradeFrom, b.GradeTo, b.Language, b.Condition,
 		b.Quantity, b.AvailableQuantity, b.Description, b.CoverURL, b.DriveID, b.ID,
 	)
-	updated, err := scanBook(row)
+	updated, err := foreignKeyAsValidation(scanBook(row))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -159,6 +169,9 @@ func buildListWhere(f ListFilter) (string, []any) {
 			"grade_from IS NOT NULL AND grade_to IS NOT NULL AND grade_from <= $%d AND grade_to >= $%d",
 			n, n,
 		))
+	}
+	if f.DriveID != nil {
+		add("drive_id = $%d", *f.DriveID)
 	}
 	if f.Language != "" {
 		add("language = $%d", f.Language)

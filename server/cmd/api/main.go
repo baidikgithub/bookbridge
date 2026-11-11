@@ -14,7 +14,13 @@ import (
 	"bookbridge/internal/book"
 	"bookbridge/internal/config"
 	"bookbridge/internal/database"
+	"bookbridge/internal/donation"
+	"bookbridge/internal/drive"
 	"bookbridge/internal/middleware"
+	"bookbridge/internal/school"
+	"bookbridge/internal/stats"
+	"bookbridge/internal/upload"
+	"bookbridge/internal/user"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -47,17 +53,28 @@ func run() error {
 
 	secret := []byte(cfg.JWTSecret)
 	authH := auth.NewHandler(pool, secret)
+	uploadH, err := upload.NewHandler(cfg.UploadDir)
+	if err != nil {
+		return err
+	}
 
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID, chimw.RealIP, chimw.Logger, chimw.Recoverer, chimw.Timeout(30*time.Second))
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	authH.PublicRoutes(r)
+	uploadH.PublicRoutes(r)
 
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Authenticate(secret))
 		authH.Routes(r)
 		book.NewHandler(book.NewService(book.NewRepository(pool))).Routes(r)
+		donation.NewHandler(pool).Routes(r)
+		stats.NewHandler(pool).Routes(r)
+		user.NewHandler(pool).Routes(r)
+		school.NewHandler(pool).Routes(r)
+		drive.NewHandler(pool).Routes(r)
+		uploadH.Routes(r)
 	})
 
 	srv := &http.Server{Addr: ":" + cfg.Port, Handler: r, ReadHeaderTimeout: 10 * time.Second}

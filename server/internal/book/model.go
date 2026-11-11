@@ -106,6 +106,7 @@ type ListFilter struct {
 	Language string
 	Status   string
 	Q        string
+	DriveID  *int64
 	Limit    int
 	Offset   int
 }

@@ -32,6 +32,8 @@ export type CreateBookInput = {
   condition?: string;
   quantity?: number;
   description?: string;
+  cover_url?: string;
+  drive_id?: number;
 };
 
 export type ListParams = {
@@ -40,6 +42,7 @@ export type ListParams = {
   language?: string;
   status?: 'available' | 'donated';
   q?: string;
+  drive_id?: number;
   limit?: number;
   offset?: number;
 };
@@ -82,11 +85,12 @@ export const session = {
   },
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, multipart = false): Promise<T> {
   const res = await fetch(API_BASE_URL + path, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      // fetch sets the multipart boundary itself, so leave Content-Type off for uploads.
+      ...(multipart ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -108,8 +112,36 @@ export type Stats = {
   donated: number;
   by_subject: { label: string; count: number }[];
   by_grade: { label: string; count: number }[];
-  monthly: { month: string; collected: number }[];
+  monthly: { month: string; collected: number; donated: number }[];
 };
+
+// Mirrors server/internal/donation.
+export type Donation = {
+  id: number;
+  book_id: number;
+  book_title: string;
+  child_name: string;
+  grade: number;
+  school: string;
+  donated_on: string;
+  volunteer_id: number | null;
+  volunteer_name: string | null;
+  created_at: string;
+};
+
+export type Role = User['role'];
+
+export type School = { id: number; name: string; donations: number };
+export type Drive = {
+  id: number;
+  name: string;
+  starts_on: string | null;
+  ends_on: string | null;
+  titles: number;
+  copies: number;
+};
+export type Photo = { uri: string; type?: string; fileName?: string };
+export type Account = User & { created_at: string };
 
 type AuthResult = { token: string; user: User };
 
@@ -127,22 +159,35 @@ export const api = {
   updateBook: (id: number, in_: Partial<CreateBookInput> & { available_quantity?: number }) =>
     request<{ data: Book }>(`/books/${id}`, { method: 'PUT', body: JSON.stringify(in_) }).then(r => r.data),
 
+  stats: (months: number) => request<{ data: Stats }>(`/stats?months=${months}`).then(r => r.data),
+
+  listDonations: (p: { book_id?: number; limit?: number; offset?: number } = {}) =>
+    request<{ data: Donation[]; total: number }>(`/donations?${qs(p)}`),
+  donate: (in_: { book_id: number; child_name: string; grade: number; school: string; donated_on?: string }) =>
+    request<{ data: Donation }>('/donations', { method: 'POST', body: JSON.stringify(in_) }).then(r => r.data),
+
+  languages: () => request<{ data: { label: string; count: number }[] }>('/languages').then(r => r.data),
+  listSchools: (q = '') => request<{ data: School[] }>(`/schools?${qs({ q })}`).then(r => r.data),
+  listDrives: () => request<{ data: Drive[] }>('/drives').then(r => r.data),
+  createDrive: (in_: { name: string; starts_on?: string; ends_on?: string }) =>
+    request<{ data: Drive }>('/drives', { method: 'POST', body: JSON.stringify(in_) }).then(r => r.data),
+
+  // Sends a photo as multipart form data; returns the server path to store as cover_url.
+  async uploadImage(photo: Photo): Promise<string> {
+    const form = new FormData();
+    form.append('file', { uri: photo.uri, type: photo.type ?? 'image/jpeg', name: photo.fileName ?? 'cover.jpg' } as any);
+    const body = await request<{ data: { url: string } }>('/uploads', { method: 'POST', body: form, headers: {} }, true);
+    return body.data.url;
+  },
+
+  listUsers: () => request<{ data: Account[] }>('/users').then(r => r.data),
+  setRole: (id: number, role: Role) =>
+    request<{ data: Account }>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify({ role }) }).then(r => r.data),
+
   login: (email: string, password: string) =>
     request<AuthResult>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   register: (name: string, email: string, password: string) =>
     request<AuthResult>('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
-
-  // The server caps a page at 100, so dashboards page through everything.
-  async allBooks(): Promise<Book[]> {
-    const out: Book[] = [];
-    for (let offset = 0; ; offset += 100) {
-      const page = await api.listBooks({ limit: 100, offset });
-      out.push(...page.data);
-      if (page.data.length === 0 || out.length >= page.total) {
-        return out;
-      }
-    }
-  },
 };
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
@@ -173,57 +218,6 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { data, error, loading, reload, setData };
 }
 
-const GRADE_BANDS: [string, number, number][] = [
-  ['K–3', 0, 3],
-  ['4–6', 4, 6],
-  ['7–9', 7, 9],
-  ['10–12', 10, 12],
-];
-
-// Dashboard totals worked out on the phone from the full book list.
-export function computeStats(books: Book[], months = 12): Stats {
-  const subj = new Map<string, number>();
-  const grade = new Map<string, number>(GRADE_BANDS.map(([l]) => [l, 0]));
-  const now = new Date();
-  const keys: string[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
-  const month = new Map<string, number>(keys.map(k => [k, 0]));
-  let total = 0;
-  let available = 0;
-
-  for (const b of books) {
-    total += b.quantity;
-    available += b.available_quantity;
-    const s = b.subject ?? 'Uncategorised';
-    subj.set(s, (subj.get(s) ?? 0) + b.quantity);
-    if (b.grade_from != null && b.grade_to != null) {
-      for (const [label, lo, hi] of GRADE_BANDS) {
-        if (b.grade_from <= hi && b.grade_to >= lo) {
-          grade.set(label, (grade.get(label) ?? 0) + b.quantity);
-        }
-      }
-    }
-    const d = new Date(b.created_at);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    if (month.has(key)) {
-      month.set(key, month.get(key)! + b.quantity);
-    }
-  }
-
-  return {
-    titles: books.length,
-    total,
-    available,
-    donated: total - available,
-    by_subject: [...subj.entries()].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count })),
-    by_grade: [...grade.entries()].map(([label, count]) => ({ label, count })),
-    monthly: keys.map(k => ({ month: k, collected: month.get(k)! })),
-  };
-}
-
 export const gradeLabel = (b: Book) => {
   if (b.grade_from == null || b.grade_to == null) {
     return 'Grade not set';
@@ -237,3 +231,24 @@ export const coverColor = (b: Pick<Book, 'id'>) => COVERS[b.id % COVERS.length];
 
 export const monthLabel = (key: string) =>
   new Date(`${key}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'short' });
+
+export const shortDate = (iso: string) =>
+  new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+// Stored covers are server paths like /uploads/abc.jpg; local photos are file:// URIs.
+export const imageUri = (uri: string | null | undefined) => (uri && uri.startsWith('/') ? API_BASE_URL + uri : uri ?? null);
+
+export const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// True for a real calendar date written YYYY-MM-DD that is today or earlier.
+export const isPastDate = (v: string) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) {
+    return false;
+  }
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3]) && v <= today();
+};

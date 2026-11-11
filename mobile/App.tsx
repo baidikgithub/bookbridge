@@ -5,14 +5,18 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { StatusBar, StyleSheet, View } from 'react-native';
+import { BackHandler, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabBar, type Tab } from './src/components';
 import { session, type User } from './src/data';
 import type { Nav, Route } from './src/nav';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { DetailScreen } from './src/screens/DetailScreen';
+import { DonationsScreen } from './src/screens/DonationsScreen';
+import { UsersScreen } from './src/screens/UsersScreen';
+import { DrivesScreen } from './src/screens/DrivesScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
 import { InventoryScreen } from './src/screens/InventoryScreen';
 import { ReportsScreen } from './src/screens/ReportsScreen';
 import { ReviewScreen } from './src/screens/ReviewScreen';
@@ -32,6 +36,7 @@ const TAB_ROOT: Record<Tab, Route> = {
   Inventory: { name: 'Inventory' },
   Add: { name: 'Scan' },
   Reports: { name: 'Reports' },
+  Profile: { name: 'Profile' },
 };
 
 // Minimal tab + stack router so the app runs without extra native dependencies.
@@ -60,10 +65,18 @@ function AppContent() {
       </>
     );
   }
-  return <SignedIn />;
+  return (
+    <SignedIn
+      user={user}
+      onSignOut={() => {
+        session.set(null);
+        setUser(null);
+      }}
+    />
+  );
 }
 
-function SignedIn() {
+function SignedIn({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<Tab>('Home');
   const [stack, setStack] = useState<Route[]>([TAB_ROOT.Home]);
@@ -82,8 +95,25 @@ function SignedIn() {
     },
   };
 
+  // Android back button/gesture walks back through the stack, then to Home, before leaving the app.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (stack.length > 1) {
+        setStack(st => st.slice(0, -1));
+        return true;
+      }
+      if (activeTab !== 'Home') {
+        setActiveTab('Home');
+        setStack([TAB_ROOT.Home]);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [stack.length, activeTab]);
+
   const route = stack[stack.length - 1];
-  const showTabs = route.name === 'Home' || route.name === 'Inventory' || route.name === 'Reports';
+  const showTabs = route.name === 'Home' || route.name === 'Inventory' || route.name === 'Reports' || route.name === 'Profile';
   const top = insets.top;
   const bottom = insets.bottom;
 
@@ -91,12 +121,17 @@ function SignedIn() {
     <View style={styles.container}>
       <StatusBar barStyle={route.name === 'Scan' ? 'light-content' : 'dark-content'} />
       <View style={styles.container}>
-        {route.name === 'Home' && <HomeScreen nav={nav} top={top} />}
+        {route.name === 'Home' && <HomeScreen nav={nav} user={user} top={top} />}
+        {route.name === 'Profile' && <ProfileScreen nav={nav} user={user} onSignOut={onSignOut} top={top} />}
         {route.name === 'Inventory' && <InventoryScreen nav={nav} top={top} />}
         {route.name === 'Reports' && <ReportsScreen top={top} />}
         {route.name === 'Scan' && <ScanScreen nav={nav} top={top} bottom={bottom} />}
-        {route.name === 'Review' && <ReviewScreen nav={nav} top={top} bottom={bottom} />}
-        {route.name === 'Detail' && <DetailScreen nav={nav} bookId={route.bookId} top={top} bottom={bottom} />}
+        {route.name === 'Review' && <ReviewScreen nav={nav} top={top} bottom={bottom} isbn={route.isbn} photo={route.photo} />}
+        {route.name === 'Donations' && <DonationsScreen nav={nav} top={top} />}
+        {route.name === 'Drives' && <DrivesScreen nav={nav} user={user} top={top} />}
+        {route.name === 'DriveBooks' && <InventoryScreen nav={nav} top={top} drive={route.drive} />}
+        {route.name === 'Users' && <UsersScreen nav={nav} me={user} top={top} />}
+        {route.name === 'Detail' && <DetailScreen nav={nav} bookId={route.bookId} user={user} top={top} bottom={bottom} />}
       </View>
       {showTabs && <TabBar active={activeTab} onSelect={nav.tab} bottomInset={bottom} />}
     </View>

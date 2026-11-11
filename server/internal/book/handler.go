@@ -73,6 +73,14 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		}
 		f.Grade = &g
 	}
+	if raw := q.Get("drive_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "drive_id must be an integer")
+			return
+		}
+		f.DriveID = &id
+	}
 	if raw := q.Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil {
