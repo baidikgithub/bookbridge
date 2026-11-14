@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>BookBridge</string>
+	<string>Book Bridge</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -35,9 +35,9 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>BookBridge uses the camera to photograph book covers and scan ISBN barcodes.</string>
+	<string>Book Bridge uses the camera to photograph book covers and scan ISBN barcodes.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>BookBridge lets you choose an existing photo of a book cover.</string>
+	<string>Book Bridge lets you choose an existing photo of a book cover.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
 	<key>RCTNewArchEnabled</key>

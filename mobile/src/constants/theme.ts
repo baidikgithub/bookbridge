@@ -1,9 +1,9 @@
 import { StyleSheet } from 'react-native';
 
-// iOS system palette (light appearance). Secondary text is darkened slightly from Apple's
+// iOS system greys with a light green brand colour (light appearance). Secondary text is darkened slightly from Apple's
 // translucent secondaryLabel so it keeps 4.5:1 contrast on white and grouped backgrounds.
 export const colors = {
-  bg: '#F2F2F7', // systemGroupedBackground
+  bg: '#F4F5F2', // grouped background, faintly warm
   surface: '#FFFFFF', // secondarySystemGroupedBackground
   ink: '#1C1C1E', // label
   inkSoft: '#3A3A3C',
@@ -12,11 +12,15 @@ export const colors = {
   line: '#C6C6C8', // separator
   border: '#D1D1D6',
   field: '#E3E3E8', // tertiarySystemFill on grouped background
-  primary: '#007AFF', // systemBlue
-  primarySoft: '#E5F1FF',
-  primaryInk: '#0055B3',
+  // Brand green. `primaryFill` is the light green behind buttons and selected states, with `onPrimary` text on it.
+  // `primary` is a deeper green for links, icons and text on white, kept readable at 4.5:1.
+  primary: '#3B7D23',
+  primaryFill: '#A6E57E',
+  onPrimary: '#16330B',
+  primarySoft: '#EEF7E7',
+  primaryInk: '#2B5E17',
   accent: '#C93400', // systemOrange, darkened for white text
-  accentChart: '#FF9500',
+  accentChart: '#C9A15A', // muted gold for 'donated' series
   okBg: '#E4F6E9',
   okInk: '#1C7A36',
   warnBg: '#FFEDE3',
@@ -45,5 +49,5 @@ export const type = StyleSheet.create({
 
 // 4-pt grid. `gutter` is the iOS standard content inset.
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, gutter: 16 };
-export const radius = { sm: 6, md: 10, lg: 12, xl: 16, xxl: 20 };
+export const radius = { sm: 6, md: 10, lg: 14, xl: 18, xxl: 22 };
 export const hairline = StyleSheet.hairlineWidth;

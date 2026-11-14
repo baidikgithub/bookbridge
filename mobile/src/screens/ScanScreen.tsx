@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Linking, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Camera, CameraType, type CameraApi } from 'react-native-camera-kit';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Segmented } from '../components';
-import type { Nav } from '../nav';
-import { colors, space, type } from '../theme';
+import { Icon, Segmented } from '../components';
+import { colors, space, type } from '../constants/theme';
+import type { Nav } from '../types';
 
 type Mode = 'Cover' | 'Barcode' | 'Upload';
 type Permission = 'checking' | 'granted' | 'denied';
@@ -120,7 +120,7 @@ export function ScanScreen({ nav, top, bottom }: { nav: Nav; top: number; bottom
           </View>
         ) : mode === 'Upload' ? (
           <Pressable accessibilityRole="button" onPress={upload} style={[s.frame, s.uploadFrame]}>
-            <Text style={s.uploadGlyph}>▧</Text>
+            <Icon name="photo" size={40} color="#FFFFFF" strokeWidth={1.5} />
             <Text style={[type.headline, { color: '#FFFFFF' }]}>Choose Photo</Text>
           </Pressable>
         ) : (
@@ -135,7 +135,7 @@ export function ScanScreen({ nav, top, bottom }: { nav: Nav; top: number; bottom
         <Segmented options={['Cover', 'Barcode', 'Upload'] as Mode[]} value={mode} onChange={setMode} dark />
         <View style={s.controls}>
           <Pressable accessibilityRole="button" accessibilityLabel="Choose from photos" onPress={upload} style={s.side}>
-            <Text style={s.sideGlyph}>▧</Text>
+            <Icon name="photo" size={24} color="#FFFFFF" />
             <Text style={s.sideLabel}>Photos</Text>
           </Pressable>
           <Pressable
@@ -148,7 +148,7 @@ export function ScanScreen({ nav, top, bottom }: { nav: Nav; top: number; bottom
             <View style={s.shutterInner} />
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Enter manually" onPress={() => nav.push({ name: 'Review' })} style={s.side}>
-            <Text style={s.sideGlyph}>✎</Text>
+            <Icon name="pencil" size={24} color="#FFFFFF" />
             <Text style={s.sideLabel}>Manual</Text>
           </Pressable>
         </View>
@@ -166,15 +166,13 @@ const s = StyleSheet.create({
   frame: { width: 220, height: 300, borderRadius: 16, borderWidth: 2, borderColor: '#FFFFFFE6' },
   frameWide: { width: 280, height: 140 },
   uploadFrame: { backgroundColor: '#1C1C1E', alignItems: 'center', justifyContent: 'center', gap: space.sm, borderStyle: 'dashed' },
-  uploadGlyph: { color: '#FFFFFF', fontSize: 36 },
   blocked: { alignItems: 'center', gap: space.sm },
-  settings: { fontSize: 17, color: '#64D2FF', fontWeight: '600' },
+  settings: { fontSize: 17, color: colors.primaryFill, fontWeight: '600' },
   hintPill: { backgroundColor: '#00000080', borderRadius: 12, paddingHorizontal: space.md, paddingVertical: 6 },
   hint: { color: '#FFFFFF', textAlign: 'center' },
   bottom: { paddingHorizontal: space.gutter, gap: space.xl },
   controls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space.lg },
   side: { width: 64, alignItems: 'center', gap: 4 },
-  sideGlyph: { color: '#FFFFFF', fontSize: 22 },
   sideLabel: { color: '#FFFFFF', fontSize: 12 },
   shutter: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#FFFFFF' },

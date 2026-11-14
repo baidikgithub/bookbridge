@@ -7,9 +7,11 @@
 import React, { useEffect, useState } from 'react';
 import { BackHandler, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { TabBar, type Tab } from './src/components';
-import { session, type User } from './src/data';
-import type { Nav, Route } from './src/nav';
+import { session } from './src/api';
+import { TabBar } from './src/components';
+import { colors } from './src/constants/theme';
+import type { Nav, Route, Tab, User } from './src/types';
+import { canOpen, homeTab, tabsFor } from './src/utils';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { DetailScreen } from './src/screens/DetailScreen';
 import { DonationsScreen } from './src/screens/DonationsScreen';
@@ -21,7 +23,6 @@ import { InventoryScreen } from './src/screens/InventoryScreen';
 import { ReportsScreen } from './src/screens/ReportsScreen';
 import { ReviewScreen } from './src/screens/ReviewScreen';
 import { ScanScreen } from './src/screens/ScanScreen';
-import { colors } from './src/theme';
 
 function App() {
   return (
@@ -57,6 +58,7 @@ function AppContent() {
         <StatusBar barStyle="dark-content" />
         <LoginScreen
           top={insets.top}
+          bottom={insets.bottom}
           onSignedIn={(token, u) => {
             session.set(token);
             setUser(u);
@@ -78,13 +80,23 @@ function AppContent() {
 
 function SignedIn({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<Tab>('Home');
-  const [stack, setStack] = useState<Route[]>([TAB_ROOT.Home]);
+  const tabs = tabsFor(user);
+  const root = homeTab(user);
+  const [activeTab, setActiveTab] = useState<Tab>(root);
+  const [stack, setStack] = useState<Route[]>([TAB_ROOT[root]]);
 
   const nav: Nav = {
-    push: r => setStack(st => [...st, r]),
+    push: r => {
+      if (!canOpen(user, r.name)) {
+        return;
+      }
+      setStack(st => [...st, r]);
+    },
     back: () => setStack(st => (st.length > 1 ? st.slice(0, -1) : [TAB_ROOT[activeTab]])),
     tab: t => {
+      if (!tabs.includes(t)) {
+        return;
+      }
       // "Add" opens the camera on top of the current tab rather than replacing it.
       if (t === 'Add') {
         setStack(st => [...st, TAB_ROOT.Add]);
@@ -95,24 +107,31 @@ function SignedIn({ user, onSignOut }: { user: User; onSignOut: () => void }) {
     },
   };
 
-  // Android back button/gesture walks back through the stack, then to Home, before leaving the app.
+  // Android back button/gesture walks back through the stack, then to the role's home tab, before leaving the app.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (stack.length > 1) {
         setStack(st => st.slice(0, -1));
         return true;
       }
-      if (activeTab !== 'Home') {
-        setActiveTab('Home');
-        setStack([TAB_ROOT.Home]);
+      if (activeTab !== root) {
+        setActiveTab(root);
+        setStack([TAB_ROOT[root]]);
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [stack.length, activeTab]);
+  }, [stack.length, activeTab, root]);
 
   const route = stack[stack.length - 1];
+  useEffect(() => {
+    if (!canOpen(user, route.name)) {
+      setActiveTab(root);
+      setStack([TAB_ROOT[root]]);
+    }
+  }, [route.name, user, root]);
+
   const showTabs = route.name === 'Home' || route.name === 'Inventory' || route.name === 'Reports' || route.name === 'Profile';
   const top = insets.top;
   const bottom = insets.bottom;
@@ -133,7 +152,7 @@ function SignedIn({ user, onSignOut }: { user: User; onSignOut: () => void }) {
         {route.name === 'Users' && <UsersScreen nav={nav} me={user} top={top} />}
         {route.name === 'Detail' && <DetailScreen nav={nav} bookId={route.bookId} user={user} top={top} bottom={bottom} />}
       </View>
-      {showTabs && <TabBar active={activeTab} onSelect={nav.tab} bottomInset={bottom} />}
+      {showTabs && <TabBar active={activeTab} onSelect={nav.tab} bottomInset={bottom} tabs={tabs} />}
     </View>
   );
 }

@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { Banner, Cover, KeyValueRow, NavBar, PrimaryButton, Row, Section, StatTile, StateView, StatusPill } from '../components';
-import { api, shortDate, coverColor, gradeLabel, useAsync, type User } from '../data';
-import type { Nav } from '../nav';
-import { colors, hairline, space, type } from '../theme';
+import { api } from '../api';
+import { Banner, Cover, Field, KeyValueRow, NavBar, PrimaryButton, Row, Section, StateView, StatTile, StatusPill, Stepper, TextButton } from '../components';
+import { colors, hairline, space, type } from '../constants/theme';
+import { useAsync } from '../hooks';
+import type { Nav, User } from '../types';
+import { coverColor, donationPerson, gradeLabel, isAdmin, shortDate } from '../utils';
 import { DonateSheet } from './DonateSheet';
 
 export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; bookId: number; user: User; top: number; bottom: number }) {
@@ -13,8 +16,14 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
   const [donating, setDonating] = useState(false);
   const [coverBusy, setCoverBusy] = useState(false);
   const [coverError, setCoverError] = useState<string | null>(null);
-  // The server only lets coordinators and admins record donations.
-  const canDonate = user.role === 'coordinator' || user.role === 'admin';
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const [quantity, setQuantity] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  // Admins manage inventory and record donations. Volunteers can only view the book.
+  const canManage = isAdmin(user);
 
   if (!book) {
     return (
@@ -45,6 +54,63 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
   };
 
   const available = book.available_quantity;
+  const donatedCopies = book.quantity - available;
+
+  const beginEdit = () => {
+    setTitle(book.title);
+    setAuthor(book.author ?? '');
+    setQuantity(book.quantity);
+    setFormError(null);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    if (saving) {
+      return;
+    }
+    if (!title.trim()) {
+      setFormError('Title is required.');
+      return;
+    }
+    if (quantity < donatedCopies) {
+      setFormError(`Quantity must cover the ${donatedCopies} donated ${donatedCopies === 1 ? 'copy' : 'copies'}.`);
+      return;
+    }
+    setSaving(true);
+    setFormError(null);
+    try {
+      await api.updateBook(book.id, {
+        title: title.trim(),
+        author: author.trim(),
+        quantity,
+        available_quantity: quantity - donatedCopies,
+      });
+      setEditing(false);
+      reload();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = () => {
+    Alert.alert('Delete this book?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.deleteBook(book.id);
+            nav.back();
+          } catch (e) {
+            setFormError(e instanceof Error ? e.message : String(e));
+          }
+        },
+      },
+    ]);
+  };
   const fields: [string, string][] = [
     ['Subject', book.subject ?? '—'],
     ['Grade range', gradeLabel(book)],
@@ -56,12 +122,26 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
 
   return (
     <View style={[s.root, { paddingTop: top }]}>
-      <NavBar onBack={nav.back} />
+      <NavBar
+        onBack={nav.back}
+        right={
+          canManage ? (
+            <View style={s.navActions}>
+              {!editing && (
+                <Pressable accessibilityRole="button" accessibilityLabel="Delete book" onPress={remove} hitSlop={10} style={s.iconBtn}>
+                  <TrashIcon />
+                </Pressable>
+              )}
+              <TextButton label={editing ? 'Cancel' : 'Edit'} onPress={() => (editing ? setEditing(false) : beginEdit())} />
+            </View>
+          ) : undefined
+        }
+      />
       <ScrollView contentContainerStyle={s.content}>
         <View style={s.head}>
           <View style={{ gap: 6, alignItems: 'center' }}>
             <Cover color={coverColor(book)} uri={book.cover_url} w={84} h={120} />
-            {canDonate && (
+            {canManage && (
               <Pressable accessibilityRole="button" onPress={changeCover} disabled={coverBusy} hitSlop={8}>
                 <Text style={s.coverLink}>{coverBusy ? 'Uploading…' : book.cover_url ? 'Change Photo' : 'Add Photo'}</Text>
               </Pressable>
@@ -75,6 +155,18 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
         </View>
 
         {coverError && <Banner tone="error" text={coverError} />}
+        {formError && <Banner tone="error" text={formError} />}
+
+        {editing && (
+          <Section header="Edit book">
+            <Field label="Title" value={title} onChange={setTitle} placeholder="Title" autoCapitalize="words" />
+            <Field label="Author" value={author} onChange={setAuthor} placeholder="Optional" autoCapitalize="words" />
+            <View style={s.qtyRow}>
+              <Text style={type.body}>Quantity</Text>
+              <Stepper value={quantity} onChange={setQuantity} min={Math.max(1, donatedCopies)} />
+            </View>
+          </Section>
+        )}
 
         <View style={s.stats}>
           <StatTile label="Available" value={available} tint={colors.okInk} />
@@ -99,7 +191,7 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
             donations.map((d, i) => (
               <Row
                 key={d.id}
-                title={d.child_name}
+                title={donationPerson(d)}
                 subtitle={`Grade ${d.grade} · ${d.school}`}
                 value={shortDate(d.donated_on)}
                 last={i === donations.length - 1}
@@ -109,10 +201,13 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
             <Row title={history.loading ? 'Loading…' : history.error ?? 'No donations recorded yet'} />
           )}
         </Section>
+
       </ScrollView>
 
       <View style={[s.footer, { paddingBottom: bottom + space.md }]}>
-        {canDonate ? (
+        {editing ? (
+          <PrimaryButton label={saving ? 'Saving…' : 'Save Changes'} onPress={save} disabled={saving} />
+        ) : canManage ? (
           <PrimaryButton
             label={available > 0 ? 'Donate Book' : 'No Copies Left'}
             tone="accent"
@@ -121,7 +216,7 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
           />
         ) : (
           <Text style={[type.footnote, { textAlign: 'center', paddingVertical: space.md }]}>
-            Ask a coordinator to record donations for this book.
+            Ask an admin to record donations for this book.
           </Text>
         )}
       </View>
@@ -140,7 +235,17 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
   );
 }
 
+function TrashIcon() {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.danger} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+    </Svg>
+  );
+}
+
 const s = StyleSheet.create({
+  navActions: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  iconBtn: { minHeight: 44, minWidth: 32, alignItems: 'center', justifyContent: 'center' },
   root: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: space.gutter, paddingBottom: space.xl, gap: space.xl },
   head: { flexDirection: 'row', gap: space.lg, alignItems: 'flex-end', paddingTop: space.sm },
@@ -148,6 +253,7 @@ const s = StyleSheet.create({
   coverLink: { fontSize: 13, color: colors.primary },
   stats: { flexDirection: 'row', gap: space.sm, marginTop: -space.sm },
   desc: { padding: space.lg, color: colors.inkSoft },
+  qtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.md },
   footer: {
     paddingHorizontal: space.gutter,
     paddingTop: space.md,

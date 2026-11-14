@@ -43,6 +43,9 @@ func (h *Handler) Routes(r chi.Router) { r.Post("/uploads", h.create) }
 
 // create accepts multipart field "file" and returns {"data":{"url":"/uploads/<name>"}}.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	if !httpx.RequireRole(w, r, "admin") {
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes+1<<20)
 	file, _, err := r.FormFile("file")
 	if err != nil {

@@ -1,9 +1,11 @@
 import React from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
+import { api } from '../api';
 import { Card, NavBar, Row, SectionLabel, StateView } from '../components';
-import { api, shortDate, useAsync } from '../data';
-import type { Nav } from '../nav';
-import { colors, space } from '../theme';
+import { colors, space } from '../constants/theme';
+import { useAsync } from '../hooks';
+import type { Nav } from '../types';
+import { donationPerson, shortDate } from '../utils';
 
 // Newest 100 donations; paging can come later if the list grows.
 export function DonationsScreen({ nav, top }: { nav: Nav; top: number }) {
@@ -16,7 +18,7 @@ export function DonationsScreen({ nav, top }: { nav: Nav; top: number }) {
       {!data ? (
         <StateView loading={loading} error={error} onRetry={reload} />
       ) : items.length === 0 ? (
-        <StateView empty="No donations recorded yet. Open a book and tap Donate Book." />
+        <StateView empty="No donations recorded yet." />
       ) : (
         <FlatList
           data={[0]}
@@ -32,7 +34,7 @@ export function DonationsScreen({ nav, top }: { nav: Nav; top: number }) {
                   <Row
                     key={d.id}
                     title={d.book_title}
-                    subtitle={`${d.child_name} · Grade ${d.grade} · ${d.school}${d.volunteer_name ? ` · by ${d.volunteer_name}` : ''}`}
+                    subtitle={`${donationPerson(d)} · Grade ${d.grade} · ${d.school}`}
                     value={shortDate(d.donated_on)}
                     onPress={() => nav.push({ name: 'Detail', bookId: d.book_id })}
                     last={i === items.length - 1}

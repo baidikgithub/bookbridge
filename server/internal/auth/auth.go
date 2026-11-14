@@ -131,6 +131,10 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, "login", err)
 		return
 	}
+	if u.Role != "admin" && u.Role != "volunteer" {
+		writeError(w, http.StatusForbidden, "this account cannot sign in")
+		return
+	}
 	h.respondWithToken(w, http.StatusOK, u)
 }
 

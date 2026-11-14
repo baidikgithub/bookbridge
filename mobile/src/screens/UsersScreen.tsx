@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Banner, Card, NavBar, Segmented, SectionLabel, StateView } from '../components';
-import { api, useAsync, type Role, type User } from '../data';
-import type { Nav } from '../nav';
-import { colors, hairline, space, type } from '../theme';
+import { api } from '../api';
+import { Banner, Card, NavBar, SectionLabel, Segmented, StateView } from '../components';
+import { colors, hairline, space, type } from '../constants/theme';
+import { useAsync } from '../hooks';
+import type { Nav, Role, User } from '../types';
 
-const ROLES = ['Volunteer', 'Coordinator', 'Admin'] as const;
+const ROLES = ['Volunteer', 'Admin'] as const;
 const toRole = (r: (typeof ROLES)[number]) => r.toLowerCase() as Role;
 const toLabel = (r: Role) => ROLES.find(x => toRole(x) === r)!;
 
@@ -21,7 +22,7 @@ export function UsersScreen({ nav, me, top }: { nav: Nav; me: User; top: number 
     try {
       const updated = await api.setRole(id, role);
       setData(list => list?.map(u => (u.id === id ? updated : u)) ?? null);
-      setMessage({ ok: true, text: `${updated.name} is now ${role}. It applies when they next sign in.` });
+      setMessage({ ok: true, text: `${updated.name} is now ${role}. It applies immediately; the app shows it after they sign in again.` });
     } catch (e) {
       setMessage({ ok: false, text: e instanceof Error ? e.message : String(e) });
     } finally {

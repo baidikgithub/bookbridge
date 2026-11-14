@@ -66,7 +66,7 @@ func run() error {
 	uploadH.PublicRoutes(r)
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Authenticate(secret))
+		r.Use(middleware.Authenticate(secret), middleware.LoadRole(pool))
 		authH.Routes(r)
 		book.NewHandler(book.NewService(book.NewRepository(pool))).Routes(r)
 		donation.NewHandler(pool).Routes(r)

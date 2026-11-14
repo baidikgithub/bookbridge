@@ -36,7 +36,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if !httpx.RequireRole(w, r, "admin") {
 		return
 	}
-	rows, err := h.pool.Query(r.Context(), `SELECT id, name, email, role, created_at FROM users ORDER BY created_at, id`)
+	// ?role=volunteer narrows the list, e.g. for the donation form's volunteer picker.
+	role := r.URL.Query().Get("role")
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT id, name, email, role, created_at FROM users
+		WHERE $1 = '' OR role = $1
+		ORDER BY CASE WHEN $1 = '' THEN created_at END, name, id`, role)
 	if err != nil {
 		httpx.Internal(w, "list users", err)
 		return
@@ -58,8 +63,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"data": out})
 }
 
-// setRole changes another user's role. The new role takes effect when that user next signs in,
-// because their current token still carries the old role.
+// setRole changes another user's role. The API checks the stored role on every request,
+// so the new role applies immediately. The app shows it after they sign in again.
 func (h *Handler) setRole(w http.ResponseWriter, r *http.Request) {
 	if !httpx.RequireRole(w, r, "admin") {
 		return
@@ -80,8 +85,8 @@ func (h *Handler) setRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	if in.Role != "volunteer" && in.Role != "coordinator" && in.Role != "admin" {
-		httpx.Error(w, http.StatusBadRequest, "role must be volunteer, coordinator or admin")
+	if in.Role != "volunteer" && in.Role != "admin" {
+		httpx.Error(w, http.StatusBadRequest, "role must be volunteer or admin")
 		return
 	}
 	var u User

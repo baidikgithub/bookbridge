@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Bar, LargeTitle, Section, Segmented, StateView, StatTile } from '../components';
-import { api, monthLabel, useAsync } from '../data';
-import { PieChart } from '../PieChart';
-import { colors, space, type } from '../theme';
+import { api } from '../api';
+import { Bar, LargeTitle, PieChart, Section, Segmented, StateView, StatTile } from '../components';
+import { colors, space, type } from '../constants/theme';
+import { useAsync } from '../hooks';
+import { monthLabel } from '../utils';
 
 type Period = '3 Months' | '6 Months' | 'Year';
 const CHART_H = 120;
 const PERIOD_MONTHS: Record<Period, number> = { '3 Months': 3, '6 Months': 6, Year: 12 };
 // Distinct iOS system hues; anything past the sixth subject is grouped as Other.
-const SUBJECT_COLORS = [colors.primary, colors.accentChart, '#34C759', '#AF52DE', '#5AC8FA', '#FF2D55'];
+const SUBJECT_COLORS = [colors.primary, '#8CCB63', colors.accentChart, '#5E8C7E', '#7A84A6', '#C08A7E'];
 const OTHER_COLOR = colors.faint;
 
 export function ReportsScreen({ top }: { top: number }) {
@@ -51,7 +52,7 @@ export function ReportsScreen({ top }: { top: number }) {
           <>
             <View style={s.tiles}>
               <StatTile label="Collected" value={collected} />
-              <StatTile label="Donated" value={donated} tint={colors.accent} />
+              <StatTile label="Donated" value={donated} tint={colors.accentChart} />
               <StatTile label="In stock" value={stats.available} />
             </View>
 

@@ -1,5 +1,6 @@
-import type { Tab } from './components';
-import type { Photo } from './data';
+import type { Photo } from './book';
+
+export type Tab = 'Home' | 'Inventory' | 'Add' | 'Reports' | 'Profile';
 
 export type Route =
   | { name: 'Home' }

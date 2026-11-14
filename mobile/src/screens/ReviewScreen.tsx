@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { launchCamera, launchImageLibrary, type ImagePickerResponse } from 'react-native-image-picker';
+import { api, ApiError } from '../api';
 import { Banner, Chip, Dropdown, Field, NavBar, PrimaryButton, Section, SectionLabel, Stepper, TextButton } from '../components';
-import { ApiError, api, CONDITIONS, SUBJECTS, useAsync, type Photo } from '../data';
-import type { Nav } from '../nav';
-import { colors, hairline, radius, space, type } from '../theme';
+import { CONDITIONS, SUBJECTS } from '../constants';
+import { colors, hairline, radius, space, type } from '../constants/theme';
+import { useAsync } from '../hooks';
+import type { Nav, Photo } from '../types';
 
 const SUBJECT_OPTIONS = SUBJECTS.map(x => ({ value: x, label: x }));
 

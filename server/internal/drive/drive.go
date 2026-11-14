@@ -61,7 +61,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	if !httpx.RequireRole(w, r, "coordinator", "admin") {
+	if !httpx.RequireRole(w, r, "admin") {
 		return
 	}
 	var in struct {

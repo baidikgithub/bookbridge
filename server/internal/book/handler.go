@@ -36,6 +36,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
+	if !requireAdmin(w, r) {
+		return
+	}
 
 	var in CreateBookInput
 	if err := decodeJSON(r, &in); err != nil {
@@ -130,9 +133,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	role, ok := middleware.RoleFromContext(r.Context())
-	if !ok || !isCoordinatorOrAdmin(role) {
-		writeError(w, http.StatusForbidden, "forbidden")
+	if !requireAdmin(w, r) {
 		return
 	}
 
@@ -161,9 +162,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	role, ok := middleware.RoleFromContext(r.Context())
-	if !ok || !strings.EqualFold(role, "admin") {
-		writeError(w, http.StatusForbidden, "forbidden")
+	if !requireAdmin(w, r) {
 		return
 	}
 
@@ -209,8 +208,13 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, op string, err error)
 	}
 }
 
-func isCoordinatorOrAdmin(role string) bool {
-	return strings.EqualFold(role, "coordinator") || strings.EqualFold(role, "admin")
+func requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	role, ok := middleware.RoleFromContext(r.Context())
+	if !ok || !strings.EqualFold(role, "admin") {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return false
+	}
+	return true
 }
 
 func parseIDParam(r *http.Request) (int64, error) {

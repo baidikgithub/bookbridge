@@ -1,23 +1,14 @@
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Card, KeyValueRow, LargeTitle, Row, Section } from '../components';
-import type { User } from '../data';
-import type { Nav } from '../nav';
-import { colors, space, type } from '../theme';
+import { colors, space, type } from '../constants/theme';
+import { initials } from '../utils';
+import type { Nav, User } from '../types';
 
 const ROLE_INFO: Record<User['role'], string> = {
-  volunteer: 'You can add books and view the inventory and reports.',
-  coordinator: 'You can add and edit books, record donations and create collection drives.',
-  admin: 'You have full access, including deleting books and managing user roles.',
+  volunteer: 'You can view inventory, reports, donations, and collection drives.',
+  admin: 'You have full access, including the dashboard and adding, editing, and deleting books.',
 };
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(w => w[0]!.toUpperCase())
-    .join('');
 
 export function ProfileScreen({ nav, user, onSignOut, top }: { nav: Nav; user: User; onSignOut: () => void; top: number }) {
   const role = user.role[0]!.toUpperCase() + user.role.slice(1);
@@ -77,8 +68,8 @@ const s = StyleSheet.create({
   content: { paddingBottom: space.xl },
   body: { paddingHorizontal: space.gutter, paddingTop: space.sm, gap: space.xl },
   identity: { flexDirection: 'row', alignItems: 'center', gap: space.lg, padding: space.lg },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  initials: { fontSize: 24, fontWeight: '600', color: '#FFFFFF' },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primaryFill, alignItems: 'center', justifyContent: 'center' },
+  initials: { fontSize: 24, fontWeight: '600', color: colors.onPrimary },
   badge: {
     alignSelf: 'flex-start',
     marginTop: 4,

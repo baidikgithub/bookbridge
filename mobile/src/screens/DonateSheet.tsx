@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Banner, Chip, Cover, Field, NavBar, PrimaryButton, Section, TextButton } from '../components';
-import { api, coverColor, isPastDate, today, useAsync, type Book } from '../data';
-import { colors, space, type } from '../theme';
+import { api } from '../api';
+import { Banner, Chip, Cover, DateField, Dropdown, Field, NavBar, PrimaryButton, Section, TextButton } from '../components';
+import { colors, space, type } from '../constants/theme';
+import { useAsync } from '../hooks';
+import type { Book } from '../types';
+import { coverColor, isPastDate, today } from '../utils';
 
 // Records who received one copy. The server lowers available copies and saves the recipient together.
 export function DonateSheet({
@@ -16,21 +19,19 @@ export function DonateSheet({
   onCancel: () => void;
   onDonated: () => void;
 }) {
-  const [child, setChild] = useState('');
+  const [volunteerId, setVolunteerId] = useState<string | undefined>(undefined);
   const [grade, setGrade] = useState('');
   const [school, setSchool] = useState('');
   const [date, setDate] = useState(today());
   const schools = useAsync(() => (visible ? api.listSchools() : Promise.resolve([])), [visible]);
+  // Every account with the volunteer role, reloaded each time the sheet opens.
+  const volunteers = useAsync(() => (visible ? api.listUsers('volunteer') : Promise.resolve([])), [visible]);
+  const volunteerOptions = (volunteers.data ?? []).map(u => ({ value: String(u.id), label: u.name }));
   const typed = school.trim().toLowerCase();
   // Saved schools matching what's typed, most-used first; hidden once the name matches exactly.
   const suggestions = (schools.data ?? [])
     .filter(x => x.name.toLowerCase().includes(typed) && x.name.toLowerCase() !== typed)
     .slice(0, 6);
-  const yesterday = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  })();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const available = book.available_quantity;
@@ -40,8 +41,12 @@ export function DonateSheet({
       return;
     }
     const g = Number(grade);
-    if (!child.trim() || !school.trim()) {
-      setError('Enter the child’s name and school.');
+    if (!volunteerId) {
+      setError('Choose a volunteer.');
+      return;
+    }
+    if (!school.trim()) {
+      setError('Enter the school.');
       return;
     }
     if (grade.trim() === '' || !Number.isInteger(g) || g < 0 || g > 12) {
@@ -49,14 +54,14 @@ export function DonateSheet({
       return;
     }
     if (!isPastDate(date)) {
-      setError('Date must be today or earlier, written YYYY-MM-DD.');
+      setError('Date must be today or earlier.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await api.donate({ book_id: book.id, child_name: child.trim(), grade: g, school: school.trim(), donated_on: date });
-      setChild('');
+      await api.donate({ book_id: book.id, volunteer_id: Number(volunteerId), grade: g, school: school.trim(), donated_on: date });
+      setVolunteerId(undefined);
       setGrade('');
       setSchool('');
       setDate(today());
@@ -94,8 +99,19 @@ export function DonateSheet({
             </View>
           </Section>
 
+          <Section header="Volunteer" footer={volunteers.error ? `Couldn’t load volunteers: ${volunteers.error}` : volunteers.data && !volunteers.data.length ? 'No volunteer accounts yet. Volunteers appear here after they sign up.' : undefined}>
+            <View style={s.dropdownRow}>
+              <Dropdown
+                label="Volunteer Name"
+                allLabel={volunteers.loading ? 'Loading…' : 'Choose a volunteer'}
+                options={volunteerOptions}
+                value={volunteerId}
+                onChange={setVolunteerId}
+              />
+            </View>
+          </Section>
+
           <Section header="Recipient">
-            <Field label="Child’s name" value={child} onChange={setChild} placeholder="Required" autoCapitalize="words" />
             <Field label="Grade" value={grade} onChange={setGrade} placeholder="0–12" keyboard="number-pad" />
             <Field label="School" value={school} onChange={setSchool} placeholder="Search or add" autoCapitalize="words" last />
           </Section>
@@ -108,12 +124,8 @@ export function DonateSheet({
           )}
 
           <Section header="Date" footer="One copy moves from Available to Donated. New schools are saved for next time.">
-            <Field label="Donated on" value={date} onChange={setDate} placeholder="YYYY-MM-DD" keyboard="numbers-and-punctuation" last />
+            <DateField label="Donated on" value={date} onChange={setDate} />
           </Section>
-          <View style={s.chips}>
-            <Chip label="Today" selected={date === today()} onPress={() => setDate(today())} />
-            <Chip label="Yesterday" selected={date === yesterday} onPress={() => setDate(yesterday)} />
-          </View>
           {error && <Banner tone="error" text={error} />}
         </ScrollView>
 
@@ -130,6 +142,7 @@ const s = StyleSheet.create({
   grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: colors.border, marginTop: 6 },
   content: { padding: space.gutter, paddingTop: space.sm, gap: space.lg },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: -space.sm },
+  dropdownRow: { flexDirection: 'row', padding: space.md },
   book: { flexDirection: 'row', gap: space.md, alignItems: 'center', padding: space.md, paddingLeft: space.lg },
   footer: { paddingHorizontal: space.gutter, paddingTop: space.sm, paddingBottom: space.xl },
 });

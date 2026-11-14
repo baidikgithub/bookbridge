@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"bookbridge/internal/httpx"
-	"bookbridge/internal/middleware"
 	"bookbridge/internal/school"
 
 	"github.com/go-chi/chi/v5"
@@ -21,7 +20,7 @@ type Donation struct {
 	ID            int64     `json:"id"`
 	BookID        int64     `json:"book_id"`
 	BookTitle     string    `json:"book_title"`
-	ChildName     string    `json:"child_name"`
+	ChildName     *string   `json:"child_name"`
 	Grade         int16     `json:"grade"`
 	School        string    `json:"school"`
 	DonatedOn     string    `json:"donated_on"`
@@ -31,11 +30,11 @@ type Donation struct {
 }
 
 type createInput struct {
-	BookID    int64  `json:"book_id"`
-	ChildName string `json:"child_name"`
-	Grade     *int16 `json:"grade"`
-	School    string `json:"school"`
-	DonatedOn string `json:"donated_on"` // optional, YYYY-MM-DD; defaults to today
+	BookID      int64  `json:"book_id"`
+	VolunteerID int64  `json:"volunteer_id"` // the volunteer who handed the book over
+	Grade       *int16 `json:"grade"`
+	School      string `json:"school"`
+	DonatedOn   string `json:"donated_on"` // optional, YYYY-MM-DD; defaults to today
 }
 
 type Handler struct{ pool *pgxpool.Pool }
@@ -61,26 +60,24 @@ func scan(row pgx.Row) (Donation, error) {
 	return d, err
 }
 
-// create is coordinator/admin only: it lowers the book's available copies and records the recipient in one transaction.
+// create is admin only: it lowers the book's available copies and records the recipient in one transaction.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	if !httpx.RequireRole(w, r, "coordinator", "admin") {
+	if !httpx.RequireRole(w, r, "admin") {
 		return
 	}
-	userID, _ := middleware.UserIDFromContext(r.Context())
 
 	var in createInput
 	if err := httpx.Decode(r, &in); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	in.ChildName = strings.TrimSpace(in.ChildName)
 	in.School = strings.TrimSpace(in.School)
 	switch {
 	case in.BookID <= 0:
 		httpx.Error(w, http.StatusBadRequest, "book_id is required")
 		return
-	case in.ChildName == "":
-		httpx.Error(w, http.StatusBadRequest, "child_name is required")
+	case in.VolunteerID <= 0:
+		httpx.Error(w, http.StatusBadRequest, "volunteer_id is required")
 		return
 	case in.School == "":
 		httpx.Error(w, http.StatusBadRequest, "school is required")
@@ -106,7 +103,17 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 
-	// Row lock stops two coordinators donating the last copy at the same time.
+	var volunteerOK bool
+	if err := tx.QueryRow(r.Context(), `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND role = 'volunteer')`, in.VolunteerID).Scan(&volunteerOK); err != nil {
+		httpx.Internal(w, "check volunteer", err)
+		return
+	}
+	if !volunteerOK {
+		httpx.Error(w, http.StatusBadRequest, "volunteer not found")
+		return
+	}
+
+	// Row lock stops two admins donating the last copy at the same time.
 	var available int
 	err = tx.QueryRow(r.Context(), `SELECT available_quantity FROM books WHERE id = $1 FOR UPDATE`, in.BookID).Scan(&available)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -135,9 +142,9 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 	var id int64
 	err = tx.QueryRow(r.Context(), `
-		INSERT INTO donations (book_id, child_name, grade, school, donated_on, volunteer_id)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-		in.BookID, in.ChildName, *in.Grade, in.School, donatedOn, userID).Scan(&id)
+		INSERT INTO donations (book_id, grade, school, donated_on, volunteer_id)
+		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		in.BookID, *in.Grade, in.School, donatedOn, in.VolunteerID).Scan(&id)
 	if err != nil {
 		httpx.Internal(w, "insert donation", err)
 		return

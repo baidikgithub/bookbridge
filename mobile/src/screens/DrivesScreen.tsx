@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { api } from '../api';
 import { Banner, Card, Field, NavBar, PrimaryButton, Row, Section, SectionLabel, StateView } from '../components';
-import { api, useAsync, type User } from '../data';
-import type { Nav } from '../nav';
-import { colors, space } from '../theme';
+import { colors, space } from '../constants/theme';
+import { useAsync } from '../hooks';
+import type { Nav, User } from '../types';
 
 // Drives can be planned ahead, so future dates are fine; the value only has to be a real date.
 const validDate = (v: string) => {
@@ -14,10 +15,10 @@ const validDate = (v: string) => {
 
 const range = (a: string | null, b: string | null) => (a && b ? `${a} → ${b}` : a ? `From ${a}` : b ? `Until ${b}` : 'No dates set');
 
-// Collection drives group books by the event they were collected at. Coordinators and admins can create them.
+// Collection drives group books by the event they were collected at. Admins can create them.
 export function DrivesScreen({ nav, user, top }: { nav: Nav; user: User; top: number }) {
   const { data, error, loading, reload } = useAsync(() => api.listDrives(), []);
-  const canCreate = user.role === 'coordinator' || user.role === 'admin';
+  const canCreate = user.role === 'admin';
   const [name, setName] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
