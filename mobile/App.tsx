@@ -18,6 +18,8 @@ import { DonationsScreen } from './src/screens/DonationsScreen';
 import { UsersScreen } from './src/screens/UsersScreen';
 import { DrivesScreen } from './src/screens/DrivesScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { MyBooksScreen } from './src/screens/MyBooksScreen';
+import { HistoryScreen } from './src/screens/HistoryScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { InventoryScreen } from './src/screens/InventoryScreen';
 import { ReportsScreen } from './src/screens/ReportsScreen';
@@ -93,6 +95,16 @@ function SignedIn({ user, onSignOut }: { user: User; onSignOut: () => void }) {
       setStack(st => [...st, r]);
     },
     back: () => setStack(st => (st.length > 1 ? st.slice(0, -1) : [TAB_ROOT[activeTab]])),
+    finishAdd: r => {
+      if (!canOpen(user, r.name)) {
+        return;
+      }
+      setStack(st => {
+        const start = st.findIndex(x => x.name === 'Scan' || x.name === 'Review');
+        const base = start > 0 ? st.slice(0, start) : start === 0 ? [TAB_ROOT[activeTab]] : st;
+        return [...base, r];
+      });
+    },
     tab: t => {
       if (!tabs.includes(t)) {
         return;
@@ -146,6 +158,8 @@ function SignedIn({ user, onSignOut }: { user: User; onSignOut: () => void }) {
         {route.name === 'Reports' && <ReportsScreen top={top} />}
         {route.name === 'Scan' && <ScanScreen nav={nav} top={top} bottom={bottom} />}
         {route.name === 'Review' && <ReviewScreen nav={nav} top={top} bottom={bottom} isbn={route.isbn} photo={route.photo} />}
+        {route.name === 'History' && <HistoryScreen nav={nav} top={top} bookId={route.bookId} bookTitle={route.bookTitle} />}
+        {route.name === 'MyBooks' && <MyBooksScreen nav={nav} user={user} top={top} />}
         {route.name === 'Donations' && <DonationsScreen nav={nav} top={top} />}
         {route.name === 'Drives' && <DrivesScreen nav={nav} user={user} top={top} />}
         {route.name === 'DriveBooks' && <InventoryScreen nav={nav} top={top} drive={route.drive} />}

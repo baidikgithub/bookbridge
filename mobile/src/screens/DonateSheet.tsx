@@ -24,9 +24,9 @@ export function DonateSheet({
   const [school, setSchool] = useState('');
   const [date, setDate] = useState(today());
   const schools = useAsync(() => (visible ? api.listSchools() : Promise.resolve([])), [visible]);
-  // Every account with the volunteer role, reloaded each time the sheet opens.
-  const volunteers = useAsync(() => (visible ? api.listUsers('volunteer') : Promise.resolve([])), [visible]);
-  const volunteerOptions = (volunteers.data ?? []).map(u => ({ value: String(u.id), label: u.name }));
+  // Admins can assign a copy to any registered user; reloaded each time the sheet opens.
+  const volunteers = useAsync(() => (visible ? api.listUsers() : Promise.resolve([])), [visible]);
+  const volunteerOptions = (volunteers.data ?? []).map(u => ({ value: String(u.id), label: u.role === 'admin' ? `${u.name} (admin)` : u.name }));
   const typed = school.trim().toLowerCase();
   // Saved schools matching what's typed, most-used first; hidden once the name matches exactly.
   const suggestions = (schools.data ?? [])
@@ -42,7 +42,7 @@ export function DonateSheet({
     }
     const g = Number(grade);
     if (!volunteerId) {
-      setError('Choose a volunteer.');
+      setError('Choose who receives the book.');
       return;
     }
     if (!school.trim()) {
@@ -99,11 +99,11 @@ export function DonateSheet({
             </View>
           </Section>
 
-          <Section header="Volunteer" footer={volunteers.error ? `Couldn’t load volunteers: ${volunteers.error}` : volunteers.data && !volunteers.data.length ? 'No volunteer accounts yet. Volunteers appear here after they sign up.' : undefined}>
+          <Section header="Assign to" footer={volunteers.error ? `Couldn’t load users: ${volunteers.error}` : 'They become the book’s owner and see it in their Featured section.'}>
             <View style={s.dropdownRow}>
               <Dropdown
-                label="Volunteer Name"
-                allLabel={volunteers.loading ? 'Loading…' : 'Choose a volunteer'}
+                label="Recipient"
+                allLabel={volunteers.loading ? 'Loading…' : 'Choose a user'}
                 options={volunteerOptions}
                 value={volunteerId}
                 onChange={setVolunteerId}

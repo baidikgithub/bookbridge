@@ -11,8 +11,8 @@ export const gradeLabel = (b: Book) => {
 // Stable placeholder colour per book for books without a cover photo.
 export const coverColor = (b: Pick<Book, 'id'>) => COVER_COLORS[b.id % COVER_COLORS.length];
 
-// Who a donation is recorded under: the volunteer, or the child for older records.
-export const donationPerson = (d: Donation) => d.volunteer_name ?? d.child_name ?? 'Unknown';
+// Who owns a donated copy now, else who it was first given to, or the child for older records.
+export const donationPerson = (d: Donation) => d.current_owner_name ?? d.volunteer_name ?? d.child_name ?? 'Unknown';
 
 // "Baidik Mazumdar" -> "BM"
 export const initials = (name: string) =>

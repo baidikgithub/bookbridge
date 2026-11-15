@@ -9,6 +9,7 @@ import { useAsync } from '../hooks';
 import type { Nav, Photo } from '../types';
 
 const SUBJECT_OPTIONS = SUBJECTS.map(x => ({ value: x, label: x }));
+const CONDITION_OPTIONS = CONDITIONS.map(x => ({ value: x, label: x }));
 
 // New-book form. Fields start empty; AI recognition will prefill them once it exists.
 export function ReviewScreen({
@@ -84,7 +85,7 @@ export function ReviewScreen({
         cover_url: coverUrl,
         drive_id: driveId ?? undefined,
       });
-      nav.push({ name: 'Detail', bookId: book.id });
+      nav.finishAdd({ name: 'Detail', bookId: book.id });
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.body?.existing_id) {
         setDuplicateId(e.body.existing_id);
@@ -167,6 +168,15 @@ export function ReviewScreen({
             onChange={v => setSubject(v ?? null)}
           />
         </View>
+        <View style={s.dropdownRow}>
+          <Dropdown
+            label="Condition"
+            allLabel="Choose condition"
+            options={CONDITION_OPTIONS}
+            value={condition ?? undefined}
+            onChange={v => setCondition(v ?? null)}
+          />
+        </View>
 
         {(drives.data?.length ?? 0) > 0 && (
           <View>
@@ -178,15 +188,6 @@ export function ReviewScreen({
             </View>
           </View>
         )}
-
-        <View>
-          <SectionLabel>Condition</SectionLabel>
-          <View style={s.chips}>
-            {CONDITIONS.map(x => (
-              <Chip key={x} label={x} selected={condition === x} onPress={() => setCondition(condition === x ? null : x)} />
-            ))}
-          </View>
-        </View>
 
         <Section header="Description">
           <TextInput
@@ -214,7 +215,7 @@ const s = StyleSheet.create({
   qtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, minHeight: 50 },
   qtyRight: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   qty: { minWidth: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
-  dropdownRow: { flexDirection: 'row' },
+  dropdownRow: { flexDirection: 'row', gap: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingHorizontal: space.xs },
   desc: { minHeight: 88, fontSize: 17, lineHeight: 22, color: colors.ink, padding: space.lg, paddingTop: space.md, textAlignVertical: 'top' },
   photoRow: { flexDirection: 'row', gap: space.lg, alignItems: 'center', padding: space.md, paddingLeft: space.lg },

@@ -133,14 +133,14 @@ export function InventoryScreen({
               />
             </View>
           )}
-          <FilterRow
-            items={STATUSES.map(x => ({
-              key: x,
-              label: x === 'available' ? 'Available' : 'All donated',
-            }))}
-            value={status}
-            onChange={v => setStatus(v as ListParams['status'])}
-          />
+            <FilterRow
+              items={STATUSES.map(x => ({
+                key: x,
+                label: x === 'available' ? 'Available' : 'All donated',
+              }))}
+              value={status}
+              onChange={v => setStatus(v as ListParams['status'])}
+            />
           <View style={s.dropdowns}>
             <Dropdown
               label="Subject"

@@ -24,7 +24,7 @@ export const styles = StyleSheet.create({
   chevron: { fontSize: 22, lineHeight: 22, color: colors.faint, marginLeft: 2 },
   kvValue: { flex: 1, textAlign: 'right', color: colors.muted },
   fieldLabel: { width: 110 },
-  input: { flex: 1, fontSize: 17, color: colors.ink, padding: 0, textAlign: 'right' },
+  input: { flex: 1, fontSize: 17, color: colors.ink, padding: 0, textAlign: 'left' },
   search: { height: 36, borderRadius: radius.md, backgroundColor: colors.field, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.sm, gap: 6 },
   searchGlyph: { fontSize: 17, color: colors.muted },
   searchInput: { flex: 1, fontSize: 17, color: colors.ink, padding: 0 },

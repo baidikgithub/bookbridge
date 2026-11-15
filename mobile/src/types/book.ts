@@ -42,6 +42,7 @@ export type ListParams = {
   status?: 'available' | 'donated';
   q?: string;
   drive_id?: number;
+  owner?: 'me'; // only books with a copy the signed-in user owns (Featured)
   limit?: number;
   offset?: number;
 };

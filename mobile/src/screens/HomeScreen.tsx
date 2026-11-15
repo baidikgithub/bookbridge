@@ -1,19 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { api } from '../api';
 import {
   Bar,
-  Card,
   CategoryRail,
-  HomeHeader,
+  Chip,
   Cover,
-  PrimaryButton,
+  FeaturedBookCard,
+  Icon,
   Row,
   Section,
   StateView,
@@ -22,7 +24,13 @@ import {
 import { colors, space, type } from '../constants/theme';
 import { useAsync } from '../hooks';
 import type { Nav, User } from '../types';
-import { coverColor, donationPerson, gradeLabel, shortDate } from '../utils';
+import {
+  coverColor,
+  donationPerson,
+  gradeLabel,
+  initials,
+  shortDate,
+} from '../utils';
 
 // Muted tints for the Services cards: a soft background with a deeper icon colour.
 const TINTS = {
@@ -55,13 +63,27 @@ export function HomeScreen({
       })),
     [],
   );
+  // Featured books, narrowed by the subject chip. Books with copies left come first.
+  const [subject, setSubject] = useState<string | undefined>();
+  const featured = useAsync(
+    // Featured: only books with a copy the signed-in user currently owns.
+    () => api.listBooks({ subject, owner: 'me', limit: 8 }),
+    [subject],
+  );
+  const { width } = useWindowDimensions();
+  const cardWidth = width - space.gutter * 2;
+  const refresh = () => {
+    reload();
+    featured.reload();
+  };
+
   const stats = data?.stats ?? null;
   const recent = data?.recent ?? [];
   const donations = data?.donations ?? [];
   const topSubjects = stats?.by_subject.slice(0, 4) ?? [];
   const max = topSubjects[0]?.count || 1;
-  const availPct =
-    stats && stats.total ? (stats.available / stats.total) * 100 : 0;
+  const admin = user.role === 'admin';
+  const firstName = user.name.split(/\s+/)[0] || user.name;
 
   const shortcuts: CategoryItem[] = [
     {
@@ -81,21 +103,37 @@ export function HomeScreen({
       onPress: () => nav.push({ name: 'Donations' }),
     },
     {
+      key: 'mybooks',
+      label: 'My Books',
+      icon: 'hand',
+      ...TINTS.rose,
+      detail: 'Pass books on',
+      onPress: () => nav.push({ name: 'MyBooks' }),
+    },
+    {
       key: 'drives',
       label: 'Collection Drives',
       icon: 'box',
       ...TINTS.sage,
       onPress: () => nav.push({ name: 'Drives' }),
     },
-    {
-      key: 'reports',
-      label: 'Reports',
-      icon: 'chart',
-      ...TINTS.stone,
-      onPress: () => nav.tab('Reports'),
-    },
-    ...(user.role === 'admin'
+    ...(admin
       ? [
+          {
+            key: 'history',
+            label: 'Transfer History',
+            icon: 'layers' as const,
+            ...TINTS.sage,
+            detail: 'All donations',
+            onPress: () => nav.push({ name: 'History' }),
+          },
+          {
+            key: 'reports',
+            label: 'Reports',
+            icon: 'chart' as const,
+            ...TINTS.stone,
+            onPress: () => nav.tab('Reports'),
+          },
           {
             key: 'users',
             label: 'Users & Roles',
@@ -112,49 +150,120 @@ export function HomeScreen({
       style={s.root}
       contentContainerStyle={[s.content, { paddingTop: top }]}
       refreshControl={
-        <RefreshControl refreshing={loading && !!data} onRefresh={reload} />
+        <RefreshControl refreshing={loading && !!data} onRefresh={refresh} />
       }
     >
       <View style={s.body}>
-        <HomeHeader
-          name={user.name}
-          statIcon="books"
-          statValue={stats ? stats.available.toLocaleString() : '—'}
-          statLabel="books available"
-          onStat={() => nav.tab('Inventory')}
-          onBell={() => nav.push({ name: 'Donations' })}
-          onAvatar={() => nav.tab('Profile')}
-          menu={shortcuts}
-        />
-
-        <Card style={s.summary}>
-          <Text style={type.footnote}>Total books collected</Text>
-          <Text style={s.bigNum}>
-            {stats ? stats.total.toLocaleString() : '—'}
-          </Text>
-          <Bar pct={availPct} color={colors.primary} height={6} />
-          <View style={s.legendRow}>
-            <Legend
-              dot={colors.primary}
-              label="Available"
-              value={stats?.available}
-            />
-            <Legend dot={colors.track} label="Donated" value={stats?.donated} />
+        <View style={s.header}>
+          <View style={s.greeting}>
+            <Text style={s.welcome}>Welcome,</Text>
+            <Text style={s.name} numberOfLines={1}>
+              {firstName} 👋
+            </Text>
           </View>
-        </Card>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Recent activity"
+            onPress={() => nav.push({ name: 'Donations' })}
+            style={({ pressed }) => [s.circle, pressed && s.pressed]}
+          >
+            <Icon name="bell" size={22} />
+            {donations.length > 0 && <View style={s.dot} />}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Profile"
+            onPress={() => nav.tab('Profile')}
+            style={({ pressed }) => [s.avatar, pressed && s.pressed]}
+          >
+            <Text style={s.avatarText}>{initials(user.name) || '?'}</Text>
+          </Pressable>
+        </View>
 
-        <View style={s.actions}>
-          <PrimaryButton
-            label="Add Book"
-            onPress={() => nav.push({ name: 'Scan' })}
-            style={{ flex: 1 }}
+        <Pressable
+          accessibilityRole={admin ? 'button' : undefined}
+          disabled={!admin}
+          onPress={() => nav.tab('Reports')}
+          style={({ pressed }) => [s.impact, pressed && s.pressed]}
+        >
+          <View style={s.impactArt} pointerEvents="none">
+            <Icon name="books" size={150} color="#16330B26" strokeWidth={0.9} />
+          </View>
+          <Text style={s.impactLabel}>Your total impact</Text>
+          <Text style={s.impactValue}>
+            {stats ? `${stats.donated.toLocaleString()} donated` : '—'}
+          </Text>
+          <Text style={s.impactSub}>
+            {stats
+              ? `${stats.total.toLocaleString()} books collected · ${stats.available.toLocaleString()} available`
+              : 'Loading…'}
+          </Text>
+        </Pressable>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={s.bleed}
+          contentContainerStyle={s.chips}
+        >
+          <Chip
+            label="All"
+            selected={!subject}
+            onPress={() => setSubject(undefined)}
           />
-          <PrimaryButton
-            label="Donate Book"
-            tone="accent"
-            onPress={() => nav.tab('Inventory')}
-            style={{ flex: 1 }}
-          />
+          {(stats?.by_subject ?? []).map(x => (
+            <Chip
+              key={x.label}
+              label={x.label}
+              selected={subject === x.label}
+              onPress={() =>
+                setSubject(subject === x.label ? undefined : x.label)
+              }
+            />
+          ))}
+        </ScrollView>
+
+        <View style={s.featured}>
+          <View style={s.featuredHead}>
+            <Text style={s.featuredTitle}>Featured</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => nav.tab('Inventory')}
+              hitSlop={8}
+            >
+              <Text style={s.seeAll}>See all</Text>
+            </Pressable>
+          </View>
+          {featured.data?.data.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={s.bleed}
+              contentContainerStyle={s.carousel}
+              decelerationRate="fast"
+              snapToInterval={cardWidth + space.md}
+            >
+              {featured.data.data.map(b => (
+                <FeaturedBookCard
+                  key={b.id}
+                  book={b}
+                  width={cardWidth}
+                  onPress={() => nav.push({ name: 'Detail', bookId: b.id })}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <StateView
+              loading={featured.loading}
+              error={featured.error}
+              onRetry={featured.reload}
+              empty={
+                subject
+                  ? `You don’t own any ${subject} books yet.`
+                  : 'No books have been donated to you yet.'
+              }
+            />
+          )}
         </View>
 
         <CategoryRail title="Services" items={shortcuts} />
@@ -167,7 +276,7 @@ export function HomeScreen({
           <>
             <Section
               header="By subject"
-              action={{ label: 'Reports', onPress: () => nav.tab('Reports') }}
+              action={admin ? { label: 'Reports', onPress: () => nav.tab('Reports') } : undefined}
             >
               <View style={s.subjects}>
                 {topSubjects.map(({ label, count }) => (
@@ -245,26 +354,6 @@ export function HomeScreen({
   );
 }
 
-function Legend({
-  dot,
-  label,
-  value,
-}: {
-  dot: string;
-  label: string;
-  value?: number;
-}) {
-  return (
-    <View style={s.legend}>
-      <View style={[s.dot, { backgroundColor: dot }]} />
-      <Text style={type.footnote}>{label}</Text>
-      <Text style={[type.subhead, { fontWeight: '600' }]}>
-        {value != null ? value.toLocaleString() : '—'}
-      </Text>
-    </View>
-  );
-}
-
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { paddingBottom: space.xl },
@@ -273,18 +362,80 @@ const s = StyleSheet.create({
     gap: space.xl,
     paddingTop: space.md,
   },
-  summary: { padding: space.lg, gap: space.sm },
-  bigNum: {
-    fontSize: 40,
-    lineHeight: 46,
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  greeting: { flex: 1 },
+  welcome: { fontSize: 15, color: colors.muted },
+  name: {
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: '700',
     color: colors.ink,
+    letterSpacing: -0.4,
+  },
+  circle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dot: {
+    position: 'absolute',
+    top: 12,
+    right: 13,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primaryFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 16, fontWeight: '600', color: colors.onPrimary },
+  pressed: { opacity: 0.8 },
+  impact: {
+    backgroundColor: colors.primaryFill,
+    borderRadius: 24,
+    padding: space.xl,
+    paddingVertical: space.xl + 4,
+    overflow: 'hidden',
+    gap: 4,
+  },
+  impactArt: { position: 'absolute', right: -6, bottom: -18 },
+  impactLabel: { fontSize: 15, color: colors.onPrimary, opacity: 0.8 },
+  impactValue: {
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: '800',
+    color: colors.onPrimary,
+    letterSpacing: -0.6,
     fontVariant: ['tabular-nums'],
   },
-  legendRow: { flexDirection: 'row', gap: space.xl, marginTop: 2 },
-  legend: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  actions: { flexDirection: 'row', gap: space.md, marginTop: -space.sm },
+  impactSub: { fontSize: 15, color: colors.onPrimary, opacity: 0.8 },
+  bleed: { marginHorizontal: -space.gutter },
+  chips: { gap: space.sm, paddingHorizontal: space.gutter },
+  featured: { gap: space.md },
+  featuredHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  featuredTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.ink,
+    letterSpacing: -0.3,
+  },
+  seeAll: { fontSize: 15, fontWeight: '600', color: colors.primary },
+  carousel: { gap: space.md, paddingHorizontal: space.gutter },
   subjects: { padding: space.lg, gap: space.md },
   subjectRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   subjectName: { width: 110 },

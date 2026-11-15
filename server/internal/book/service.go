@@ -3,6 +3,7 @@ package book
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -75,7 +76,9 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateBookInput) (*Bo
 		}
 	}
 
-	return s.repo.Update(ctx, merged)
+	// Without an explicit available count, the repository applies the quantity change as a delta
+	// against the stored row, so a donation made while this edit was open isn't undone.
+	return s.repo.Update(ctx, merged, in.AvailableQuantity != nil)
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
@@ -226,6 +229,13 @@ func mergeBookUpdate(existing *Book, in UpdateBookInput) (*Book, error) {
 	if in.Quantity != nil {
 		if *in.Quantity < 1 {
 			return nil, &ValidationError{Message: "quantity must be at least 1"}
+		}
+		// Changing the total moves available copies by the same amount, so donated copies stay donated.
+		if in.AvailableQuantity == nil {
+			out.AvailableQuantity += *in.Quantity - out.Quantity
+			if out.AvailableQuantity < 0 {
+				return nil, &ValidationError{Message: fmt.Sprintf("quantity can't be less than the %d copies already donated", existing.Quantity-existing.AvailableQuantity)}
+			}
 		}
 		out.Quantity = *in.Quantity
 	}

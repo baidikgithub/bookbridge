@@ -55,7 +55,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
-	if _, ok := middleware.UserIDFromContext(r.Context()); !ok {
+	me, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
@@ -83,6 +84,11 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.DriveID = &id
+	}
+	// The catalogue is global. owner=me narrows it to books with a copy the caller currently owns,
+	// which is what the Featured section shows.
+	if q.Get("owner") == "me" {
+		f.OwnerID = &me
 	}
 	if raw := q.Get("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -197,7 +203,7 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, op string, err error)
 	case errors.Is(err, ErrNotFound):
 		writeError(w, http.StatusNotFound, "book not found")
 	case errors.Is(err, ErrHasDonations):
-		writeError(w, http.StatusConflict, "book has donations")
+		writeError(w, http.StatusConflict, "this book has donation records, so it can't be deleted")
 	case errors.Is(err, ErrUnauthorized):
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 	case errors.Is(err, ErrForbidden):

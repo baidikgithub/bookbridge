@@ -68,7 +68,11 @@ func (r *Repository) GetByISBN(ctx context.Context, isbn string) (*Book, error) 
 	return b, err
 }
 
-func (r *Repository) Update(ctx context.Context, b *Book) (*Book, error) {
+// Update saves b. When explicitAvailable is false, available_quantity is not taken from b:
+// it moves by the change in quantity relative to the row as stored right now, so a donation
+// recorded while an edit was open is kept. The table's CHECK constraint
+// rejects a result below zero.
+func (r *Repository) Update(ctx context.Context, b *Book, explicitAvailable bool) (*Book, error) {
 	const q = `
 		UPDATE books SET
 			isbn = $1,
@@ -80,7 +84,7 @@ func (r *Repository) Update(ctx context.Context, b *Book) (*Book, error) {
 			language = $7,
 			condition = $8,
 			quantity = $9,
-			available_quantity = $10,
+			available_quantity = CASE WHEN $15 THEN $10 ELSE available_quantity + ($9 - quantity) END,
 			description = $11,
 			cover_url = $12,
 			drive_id = $13
@@ -89,9 +93,13 @@ func (r *Repository) Update(ctx context.Context, b *Book) (*Book, error) {
 
 	row := r.pool.QueryRow(ctx, q,
 		b.ISBN, b.Title, b.Author, b.Subject, b.GradeFrom, b.GradeTo, b.Language, b.Condition,
-		b.Quantity, b.AvailableQuantity, b.Description, b.CoverURL, b.DriveID, b.ID,
+		b.Quantity, b.AvailableQuantity, b.Description, b.CoverURL, b.DriveID, b.ID, explicitAvailable,
 	)
 	updated, err := foreignKeyAsValidation(scanBook(row))
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23514" {
+		return nil, &ValidationError{Message: "quantity can't be less than the copies already donated"}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -172,6 +180,9 @@ func buildListWhere(f ListFilter) (string, []any) {
 	}
 	if f.DriveID != nil {
 		add("drive_id = $%d", *f.DriveID)
+	}
+	if f.OwnerID != nil {
+		add("EXISTS (SELECT 1 FROM donations d WHERE d.book_id = books.id AND d.current_owner_id = $%d)", *f.OwnerID)
 	}
 	if f.Language != "" {
 		add("language = $%d", f.Language)

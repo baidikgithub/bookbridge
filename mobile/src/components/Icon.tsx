@@ -23,7 +23,10 @@ export type IconName =
   | 'pencil'
   | 'chevronRight'
   | 'chevronDown'
-  | 'calendar';
+  | 'calendar'
+  | 'userCircle'
+  | 'bookmark'
+  | 'layers';
 
 const PATHS: Record<IconName, React.ReactNode> = {
   home: <Path d="M4 10.2 12 4l8 6.2V19a1.5 1.5 0 0 1-1.5 1.5H15v-5.5H9v5.5H5.5A1.5 1.5 0 0 1 4 19z" />,
@@ -81,6 +84,15 @@ const PATHS: Record<IconName, React.ReactNode> = {
   pencil: <Path d="M15.5 5.5 18.5 8.5M4 20l1-4.2L15.8 5a1.8 1.8 0 0 1 2.6 0l.6.6a1.8 1.8 0 0 1 0 2.6L8.2 19z" />,
   chevronRight: <Path d="m9.5 6 6 6-6 6" />,
   chevronDown: <Path d="m6 9.5 6 6 6-6" />,
+  userCircle: (
+    <>
+      <Circle cx={12} cy={12} r={9} />
+      <Circle cx={12} cy={10} r={3.2} />
+      <Path d="M6.2 18.4c1.2-2.3 3.3-3.6 5.8-3.6s4.6 1.3 5.8 3.6" />
+    </>
+  ),
+  bookmark: <Path d="M6.5 4.5h11v15.5L12 16.2 6.5 20z" />,
+  layers: <Path d="m12 4 8.5 4.5L12 13 3.5 8.5zM3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5" />,
   calendar: (
     <>
       <Rect x={4} y={5.5} width={16} height={14.5} rx={2.5} />

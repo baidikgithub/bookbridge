@@ -9,6 +9,7 @@ import { useAsync } from '../hooks';
 import type { Nav, User } from '../types';
 import { coverColor, donationPerson, gradeLabel, isAdmin, shortDate } from '../utils';
 import { DonateSheet } from './DonateSheet';
+import { PassOnSheet } from './PassOnSheet';
 
 export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; bookId: number; user: User; top: number; bottom: number }) {
   const { data: book, error, loading, reload } = useAsync(() => api.getBook(bookId), [bookId]);
@@ -24,6 +25,10 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
   const [formError, setFormError] = useState<string | null>(null);
   // Admins manage inventory and record donations. Volunteers can only view the book.
   const canManage = isAdmin(user);
+  // Donated copies of this book the signed-in user owns now; the owner can donate one onward.
+  const owned = useAsync(() => api.listDonations({ book_id: bookId, owner: 'me', limit: 50 }), [bookId]);
+  const ownedCopy = owned.data?.data[0] ?? null;
+  const [passing, setPassing] = useState(false);
 
   if (!book) {
     return (
@@ -82,8 +87,9 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
       await api.updateBook(book.id, {
         title: title.trim(),
         author: author.trim(),
+        // The server moves available copies by the change in quantity, so a donation made
+        // while this form was open isn't undone.
         quantity,
-        available_quantity: quantity - donatedCopies,
       });
       setEditing(false);
       reload();
@@ -186,7 +192,9 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
           </Section>
         ) : null}
 
-        <Section header="Donation history">
+        <Section
+          header="Donation history"
+          action={canManage ? { label: 'Full History', onPress: () => nav.push({ name: 'History', bookId: book.id, bookTitle: book.title }) } : undefined}>
           {donations.length ? (
             donations.map((d, i) => (
               <Row
@@ -214,13 +222,33 @@ export function DetailScreen({ nav, bookId, user, top, bottom }: { nav: Nav; boo
             disabled={available < 1}
             onPress={() => setDonating(true)}
           />
+        ) : ownedCopy ? (
+          <PrimaryButton
+            label={(owned.data?.total ?? 0) > 1 ? `Donate a Copy (you have ${owned.data!.total})` : 'Donate to a Volunteer'}
+            onPress={() => setPassing(true)}
+          />
         ) : (
           <Text style={[type.footnote, { textAlign: 'center', paddingVertical: space.md }]}>
-            Ask an admin to record donations for this book.
+            {owned.loading ? 'Checking ownership…' : 'You don’t own a copy of this book.'}
           </Text>
         )}
       </View>
 
+      <PassOnSheet
+        donation={passing ? ownedCopy : null}
+        meId={user.id}
+        onCancel={() => setPassing(false)}
+        onDone={() => {
+          setPassing(false);
+          // Ownership moved: if that was the user's last copy, the book leaves their Explore.
+          if ((owned.data?.total ?? 0) <= 1) {
+            nav.back();
+          } else {
+            owned.reload();
+            history.reload();
+          }
+        }}
+      />
       <DonateSheet
         visible={donating}
         book={book}

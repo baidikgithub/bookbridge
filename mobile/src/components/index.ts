@@ -11,3 +11,4 @@ export * from './ViewToggle';
 export * from './CategoryCard';
 export * from './HomeHeader';
 export * from './Icon';
+export * from './FeaturedBookCard';

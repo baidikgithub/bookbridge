@@ -107,6 +107,7 @@ type ListFilter struct {
 	Status   string
 	Q        string
 	DriveID  *int64
+	OwnerID  *int64 // only books with a donated copy this user holds now
 	Limit    int
 	Offset   int
 }

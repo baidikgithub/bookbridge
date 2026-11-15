@@ -45,6 +45,7 @@ export function ProfileScreen({ nav, user, onSignOut, top }: { nav: Nav; user: U
         </Section>
 
         <Section header="Shortcuts">
+          <Row title="My Books" subtitle="Books with you, and passing them on" onPress={() => nav.push({ name: 'MyBooks' })} />
           <Row title="Donations" onPress={() => nav.push({ name: 'Donations' })} />
           <Row title="Collection drives" onPress={() => nav.push({ name: 'Drives' })} last={user.role !== 'admin'} />
           {user.role === 'admin' && <Row title="Users and roles" onPress={() => nav.push({ name: 'Users' })} last />}

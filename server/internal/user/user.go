@@ -30,6 +30,36 @@ func NewHandler(pool *pgxpool.Pool) *Handler { return &Handler{pool: pool} }
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/users", h.list)
 	r.Patch("/users/{id}", h.setRole)
+	r.Get("/volunteers", h.volunteers)
+}
+
+// volunteers lists volunteer names for any signed-in user, e.g. to pick who to pass a book to.
+// It leaves out emails, which only admins see on /users.
+func (h *Handler) volunteers(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.pool.Query(r.Context(), `SELECT id, name FROM users WHERE role = 'volunteer' ORDER BY name, id`)
+	if err != nil {
+		httpx.Internal(w, "list volunteers", err)
+		return
+	}
+	defer rows.Close()
+	type volunteer struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	out := make([]volunteer, 0)
+	for rows.Next() {
+		var v volunteer
+		if err := rows.Scan(&v.ID, &v.Name); err != nil {
+			httpx.Internal(w, "scan volunteer", err)
+			return
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		httpx.Internal(w, "list volunteers", err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"data": out})
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
